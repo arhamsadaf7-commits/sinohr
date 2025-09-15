@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 import { Building, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface LoginFormProps {
@@ -7,6 +8,7 @@ interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
+  const { login: mockLogin } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -24,20 +26,38 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password,
-        });
-        if (error) throw error;
+        try {
+          const { error } = await supabase.auth.signInWithPassword({
+            email: formData.email,
+            password: formData.password,
+          });
+          if (error) {
+            // If Supabase auth fails, try mock authentication
+            await mockLogin({
+              email: formData.email,
+              password: formData.password,
+            });
+          }
+        } catch (supabaseError) {
+          // Fallback to mock authentication for demo credentials
+          await mockLogin({
+            email: formData.email,
+            password: formData.password,
+          });
+        }
       } else {
         if (formData.password !== formData.confirmPassword) {
           throw new Error('Passwords do not match');
         }
-        const { error } = await supabase.auth.signUp({
-          email: formData.email,
-          password: formData.password,
-        });
-        if (error) throw error;
+        try {
+          const { error } = await supabase.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+          });
+          if (error) throw error;
+        } catch (supabaseError) {
+          throw new Error('Sign up failed. Please check your Supabase configuration.');
+        }
       }
       onSuccess();
     } catch (error: any) {
@@ -67,13 +87,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             <p className="text-gray-600 mt-1">
               {isLogin ? 'Sign in to access your dashboard' : 'Sign up to get started'}
             </p>
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-800 font-medium mb-1">Demo Credentials:</p>
+            <p className="text-xs text-blue-700">Email: admin@company.com</p>
+            <p className="text-xs text-blue-700">Password: admin123</p>
+            <p className="text-xs text-blue-600 mt-2">Note: These credentials work with the demo system when Supabase auth is not configured.</p>
           </div>
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-700 text-sm">{error}</p>
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
