@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { AuthProvider } from './context/AuthContext';
-import { LoginForm } from './components/Auth/LoginForm';
+import LoginForm from './components/Auth/LoginForm';
 import { SpreadsheetView } from './components/ExcelView/SpreadsheetView';
 import { AdvancedDashboard } from './components/Analytics/AdvancedDashboard';
 import { ReportsPage } from './components/Reports/ReportsPage';
