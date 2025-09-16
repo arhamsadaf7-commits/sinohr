@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import { AuthProvider } from './context/AuthContext';
 import LoginForm from './components/Auth/LoginForm';
 import { SpreadsheetView } from './components/ExcelView/SpreadsheetView';
 import { AdvancedDashboard } from './components/Analytics/AdvancedDashboard';
@@ -76,7 +75,7 @@ function App() {
   };
 
   if (showAdminPanel) {
-    return <AuthProvider><AdminApp /></AuthProvider>;
+    return <AdminApp />;
   }
 
   if (loading) {
