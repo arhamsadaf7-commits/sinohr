@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import { useAuth } from './context/AuthContext';
 import LoginForm from './components/Auth/LoginForm';
 import { SpreadsheetView } from './components/ExcelView/SpreadsheetView';
 import { AdvancedDashboard } from './components/Analytics/AdvancedDashboard';
@@ -20,8 +21,8 @@ import { ZawilExcelUploader } from './components/ZawilUploader/ZawilExcelUploade
 import { Toaster } from 'react-hot-toast';
 
 function App() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { state: authState, logout } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [activePage, setActivePage] = useState('dashboard');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
@@ -44,30 +45,14 @@ function App() {
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('hashchange', checkAdminPanel);
     
-    // Check current auth status
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
     return () => {
-      subscription.unsubscribe();
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('hashchange', checkAdminPanel);
     };
   }, []);
 
-  const handleAuthSuccess = () => {
-    // User state will be updated by the auth listener
-  };
-
   const handleLogout = () => {
-    setUser(null);
+    logout();
     setActivePage('dashboard');
     setShowAdminPanel(false);
     // Clear admin panel from URL
@@ -78,7 +63,7 @@ function App() {
     return <AdminApp />;
   }
 
-  if (loading) {
+  if (authState.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -89,8 +74,8 @@ function App() {
     );
   }
 
-  if (!user) {
-    return <LoginForm onSuccess={handleAuthSuccess} />;
+  if (!authState.isAuthenticated) {
+    return <LoginForm />;
   }
 
   const renderPage = () => {

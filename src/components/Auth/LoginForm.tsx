@@ -28,8 +28,13 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     try {
       if (isLogin) {
         await login({ email, password });
-        onSuccess?.();
+        if (onSuccess) {
+          onSuccess();
+        }
       } else {
+        if (password !== confirmPassword) {
+          throw new Error('Passwords do not match');
+        }
         await signup({ username, email, password, confirmPassword });
         setSuccess('Account created successfully! Please login.');
         setIsLogin(true);
@@ -42,6 +47,15 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setEmail('');
+    setPassword('');
+    setUsername('');
+    setConfirmPassword('');
+    setError('');
+    setSuccess('');
   };
 
   return (
@@ -176,12 +190,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
             <button
               onClick={() => {
                 setIsLogin(!isLogin);
-                setError('');
-                setSuccess('');
-                setEmail('');
-                setPassword('');
-                setUsername('');
-                setConfirmPassword('');
+                resetForm();
               }}
               className="text-indigo-600 hover:text-indigo-700 font-medium"
             >
@@ -191,9 +200,9 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
           {isLogin && (
             <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">Demo Credentials:</p>
-            <p className="text-xs text-gray-500">Email: admin@company.com</p>
-            <p className="text-xs text-gray-500">Password: admin123</p>
+              <p className="text-sm text-gray-600 mb-2">Demo Credentials:</p>
+              <p className="text-xs text-gray-500">Email: admin@company.com</p>
+              <p className="text-xs text-gray-500">Password: admin123</p>
             </div>
           )}
         </div>
