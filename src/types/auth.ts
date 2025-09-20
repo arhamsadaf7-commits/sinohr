@@ -64,6 +64,17 @@ export interface ExpiryItem {
   expiryDate: string;
   daysUntilExpiry: number;
   status: 'expired' | 'expiring-soon' | 'expiring-later' | 'valid';
+  // Zawil-specific fields
+  zawilPermitId?: string;
+  permitType?: string;
+  issuedFor?: string;
+  arabicName?: string;
+  moiNumber?: string;
+  passportNumber?: string;
+  nationality?: string;
+  plateNumber?: string;
+  portName?: string;
+  issueDate?: string;
 }
 
 export interface ExpiryStats {

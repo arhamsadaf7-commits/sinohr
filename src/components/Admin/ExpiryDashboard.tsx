@@ -115,7 +115,7 @@ export const ExpiryDashboard: React.FC = () => {
       });
     });
 
-    // Add mock Zawil permits
+    // Add mock Zawil permits with exact column structure
     state.employees.slice(0, 10).forEach((employee, index) => {
       const mockExpiryDate = new Date();
       mockExpiryDate.setDate(mockExpiryDate.getDate() + (index * 10 - 20)); // Some expired, some expiring
@@ -129,7 +129,17 @@ export const ExpiryDashboard: React.FC = () => {
         employeeId: employee.id,
         employeeName: employee.fullName,
         documentType: 'zawil' as any,
-        documentNumber: `ZWL${String(index + 1).padStart(6, '0')}`,
+        documentNumber: `ZWL${String(index + 1).padStart(3, '0')}`,
+        zawilPermitId: `ZWL${String(index + 1).padStart(3, '0')}`,
+        permitType: index % 3 === 0 ? 'Work Permit' : index % 3 === 1 ? 'Business License' : 'Professional License',
+        issuedFor: index % 2 === 0 ? 'Individual' : 'Company',
+        arabicName: `الاسم العربي ${index + 1}`,
+        moiNumber: `${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        passportNumber: `P${String(Math.floor(10000000 + Math.random() * 90000000))}`,
+        nationality: index % 4 === 0 ? 'Saudi Arabia' : index % 4 === 1 ? 'Egypt' : index % 4 === 2 ? 'Pakistan' : 'India',
+        plateNumber: `${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}-${Math.floor(1000 + Math.random() * 9000)}`,
+        portName: index % 3 === 0 ? 'King Abdulaziz Port' : index % 3 === 1 ? 'Jeddah Islamic Port' : 'Dammam Port',
+        issueDate: new Date(Date.now() - (365 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
         expiryDate: mockExpiryDate.toISOString().split('T')[0],
         daysUntilExpiry,
         status,
@@ -556,8 +566,26 @@ export const ExpiryDashboard: React.FC = () => {
                     />
                   </th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Employee Name</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Document Number</th>
+                  {tabId === 'zawil' ? (
+                    <>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zawil Permit Id</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Permit Type</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Issued for</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Arabic Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">English Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">MOI Number</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Passport Number</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Nationality</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Plate Number</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Port Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Issue Date</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Employee Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Document Number</th>
+                    </>
+                  )}
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Expiry Date</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Days Remaining</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Actions</th>
@@ -590,8 +618,26 @@ export const ExpiryDashboard: React.FC = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.employeeName}</td>
-                    <td className="px-4 py-3 font-mono text-sm">{item.documentNumber}</td>
+                    {tabId === 'zawil' ? (
+                      <>
+                        <td className="px-4 py-3 font-mono text-sm">{(item as any).zawilPermitId || item.documentNumber}</td>
+                        <td className="px-4 py-3 text-sm">{(item as any).permitType || 'Work Permit'}</td>
+                        <td className="px-4 py-3 text-sm">{(item as any).issuedFor || 'Individual'}</td>
+                        <td className="px-4 py-3 text-sm">{(item as any).arabicName || 'الاسم العربي'}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{item.employeeName}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{(item as any).moiNumber || '1234567890'}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{(item as any).passportNumber || 'P12345678'}</td>
+                        <td className="px-4 py-3 text-sm">{(item as any).nationality || 'Saudi Arabia'}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{(item as any).plateNumber || 'ABC-1234'}</td>
+                        <td className="px-4 py-3 text-sm">{(item as any).portName || 'King Abdulaziz Port'}</td>
+                        <td className="px-4 py-3 text-sm">{(item as any).issueDate || '2024-01-01'}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 font-medium text-gray-900">{item.employeeName}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{item.documentNumber}</td>
+                      </>
+                    )}
                     <td className="px-4 py-3 text-sm">{new Date(item.expiryDate).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`font-medium ${
@@ -719,32 +765,93 @@ export const ExpiryDashboard: React.FC = () => {
                     {/* Document Info */}
                     <div className="bg-gray-50 rounded-lg p-4">
                       <h4 className="font-medium text-gray-900 mb-3">Document Information</h4>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-600">Type:</span>
-                          <span className="ml-2 font-medium capitalize">{item.documentType}</span>
+                      {item.documentType === 'zawil' ? (
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">Zawil Permit Id:</span>
+                            <span className="ml-2 font-mono">{(item as any).zawilPermitId || item.documentNumber}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Permit Type:</span>
+                            <span className="ml-2 font-medium">{(item as any).permitType || 'Work Permit'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Issued for:</span>
+                            <span className="ml-2 font-medium">{(item as any).issuedFor || 'Individual'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Arabic Name:</span>
+                            <span className="ml-2 font-medium">{(item as any).arabicName || 'الاسم العربي'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">MOI Number:</span>
+                            <span className="ml-2 font-mono">{(item as any).moiNumber || '1234567890'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Passport Number:</span>
+                            <span className="ml-2 font-mono">{(item as any).passportNumber || 'P12345678'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Nationality:</span>
+                            <span className="ml-2 font-medium">{(item as any).nationality || 'Saudi Arabia'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Plate Number:</span>
+                            <span className="ml-2 font-mono">{(item as any).plateNumber || 'ABC-1234'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Port Name:</span>
+                            <span className="ml-2 font-medium">{(item as any).portName || 'King Abdulaziz Port'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Issue Date:</span>
+                            <span className="ml-2 font-medium">{(item as any).issueDate || '2024-01-01'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Expiry Date:</span>
+                            <span className="ml-2 font-medium">{new Date(item.expiryDate).toLocaleDateString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Days Remaining:</span>
+                            <span className={`ml-2 font-medium ${
+                              item.daysUntilExpiry < 0 ? 'text-red-600' :
+                              item.daysUntilExpiry <= 30 ? 'text-yellow-600' : 'text-green-600'
+                            }`}>
+                              {item.daysUntilExpiry < 0 
+                                ? `${Math.abs(item.daysUntilExpiry)} days ago`
+                                : `${item.daysUntilExpiry} days`
+                              }
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Number:</span>
-                          <span className="ml-2 font-mono">{item.documentNumber}</span>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">Type:</span>
+                            <span className="ml-2 font-medium capitalize">{item.documentType}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Number:</span>
+                            <span className="ml-2 font-mono">{item.documentNumber}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Expiry Date:</span>
+                            <span className="ml-2 font-medium">{new Date(item.expiryDate).toLocaleDateString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Days Remaining:</span>
+                            <span className={`ml-2 font-medium ${
+                              item.daysUntilExpiry < 0 ? 'text-red-600' :
+                              item.daysUntilExpiry <= 30 ? 'text-yellow-600' : 'text-green-600'
+                            }`}>
+                              {item.daysUntilExpiry < 0 
+                                ? `${Math.abs(item.daysUntilExpiry)} days ago`
+                                : `${item.daysUntilExpiry} days`
+                              }
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-gray-600">Expiry Date:</span>
-                          <span className="ml-2 font-medium">{new Date(item.expiryDate).toLocaleDateString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-600">Days Remaining:</span>
-                          <span className={`ml-2 font-medium ${
-                            item.daysUntilExpiry < 0 ? 'text-red-600' :
-                            item.daysUntilExpiry <= 30 ? 'text-yellow-600' : 'text-green-600'
-                          }`}>
-                            {item.daysUntilExpiry < 0 
-                              ? `${Math.abs(item.daysUntilExpiry)} days ago`
-                              : `${item.daysUntilExpiry} days`
-                            }
-                          </span>
-                        </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Employee Info */}
@@ -804,9 +911,28 @@ export const ExpiryDashboard: React.FC = () => {
             .flatMap(category => category.items)
             .find(item => item.id === showUpdateModal);
 
-          const [updateData, setUpdateData] = useState({
-            documentNumber: item?.documentNumber || '',
-            expiryDate: item?.expiryDate || ''
+          const [updateData, setUpdateData] = useState(() => {
+            if (item?.documentType === 'zawil') {
+              return {
+                zawilPermitId: (item as any).zawilPermitId || item.documentNumber || '',
+                permitType: (item as any).permitType || '',
+                issuedFor: (item as any).issuedFor || '',
+                arabicName: (item as any).arabicName || '',
+                englishName: item.employeeName || '',
+                moiNumber: (item as any).moiNumber || '',
+                passportNumber: (item as any).passportNumber || '',
+                nationality: (item as any).nationality || '',
+                plateNumber: (item as any).plateNumber || '',
+                portName: (item as any).portName || '',
+                issueDate: (item as any).issueDate || '',
+                expiryDate: item?.expiryDate || ''
+              };
+            } else {
+              return {
+                documentNumber: item?.documentNumber || '',
+                expiryDate: item?.expiryDate || ''
+              };
+            }
           });
 
           const handleUpdate = () => {
@@ -823,7 +949,7 @@ export const ExpiryDashboard: React.FC = () => {
                 documentType: item.documentType,
                 documentNumber: item.documentNumber,
                 oldExpiryDate: item.expiryDate,
-                newExpiryDate: updateData.expiryDate,
+                newExpiryDate: item.documentType === 'zawil' ? (updateData as any).expiryDate : (updateData as any).expiryDate,
                 updatedAt: new Date().toISOString(),
                 updatedBy: 'Current User',
                 action: 'updated'
@@ -835,7 +961,7 @@ export const ExpiryDashboard: React.FC = () => {
 
           return (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+              <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b border-gray-200">
                   <h3 className="text-lg font-semibold text-gray-900">Update Document</h3>
                   <button
@@ -847,29 +973,147 @@ export const ExpiryDashboard: React.FC = () => {
                 </div>
                 
                 <div className="p-6 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Document Number
-                    </label>
-                    <input
-                      type="text"
-                      value={updateData.documentNumber}
-                      onChange={(e) => setUpdateData(prev => ({ ...prev, documentNumber: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Expiry Date
-                    </label>
-                    <input
-                      type="date"
-                      value={updateData.expiryDate}
-                      onChange={(e) => setUpdateData(prev => ({ ...prev, expiryDate: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+                  {item?.documentType === 'zawil' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Zawil Permit Id</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).zawilPermitId}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, zawilPermitId: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Permit Type</label>
+                        <select
+                          value={(updateData as any).permitType}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, permitType: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="Work Permit">Work Permit</option>
+                          <option value="Business License">Business License</option>
+                          <option value="Professional License">Professional License</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Issued for</label>
+                        <select
+                          value={(updateData as any).issuedFor}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, issuedFor: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="Individual">Individual</option>
+                          <option value="Company">Company</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Arabic Name</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).arabicName}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, arabicName: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">English Name</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).englishName}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, englishName: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">MOI Number</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).moiNumber}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, moiNumber: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Passport Number</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).passportNumber}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, passportNumber: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Nationality</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).nationality}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, nationality: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Plate Number</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).plateNumber}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, plateNumber: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Port Name</label>
+                        <select
+                          value={(updateData as any).portName}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, portName: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="King Abdulaziz Port">King Abdulaziz Port</option>
+                          <option value="Jeddah Islamic Port">Jeddah Islamic Port</option>
+                          <option value="Dammam Port">Dammam Port</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Issue Date</label>
+                        <input
+                          type="date"
+                          value={(updateData as any).issueDate}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, issueDate: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
+                        <input
+                          type="date"
+                          value={(updateData as any).expiryDate}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, expiryDate: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Document Number</label>
+                        <input
+                          type="text"
+                          value={(updateData as any).documentNumber}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, documentNumber: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Expiry Date</label>
+                        <input
+                          type="date"
+                          value={(updateData as any).expiryDate}
+                          onChange={(e) => setUpdateData(prev => ({ ...prev, expiryDate: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </>
+                  )}
                   
                   <div className="flex gap-3 pt-4">
                     <button
