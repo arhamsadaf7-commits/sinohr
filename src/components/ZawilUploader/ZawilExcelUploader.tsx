@@ -2,7 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
-import { useEmployee } from '../../context/EmployeeContext';
+import { ZawilService } from '../../services/zawilService';
+import { ZawilUploadRecord } from '../../types/zawil';
+import { useAuth } from '../../context/AuthContext';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -17,56 +19,14 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-interface ZawilRecord {
-  id: string;
-  fileName: string;
-  rowNumber: number;
-  zawilPermitId: string;
-  permitType: string;
-  issuedFor: string;
-  arabicName: string;
-  englishName: string;
-  moiNumber: string;
-  passportNumber: string;
-  nationality: string;
-  plateNumber: string;
-  portName: string;
-  issueDate: string;
-  expiryDate: string;
-  status: 'success' | 'error' | 'warning' | 'duplicate';
-  errors: string[];
-  isDuplicate?: boolean;
-}
-
-interface InsertedRecord extends ZawilRecord {
-  insertedAt: string;
-  uploadedBy: string;
-  employeeId?: string;
-  isNewEmployee?: boolean;
-}
-
-interface UploadHistory {
-  id: string;
-  fileName: string;
-  uploadedBy: string;
-  uploadedAt: string;
-  recordsCount: number;
-  successCount: number;
-  errorCount: number;
-}
-
 export const ZawilExcelUploader: React.FC = () => {
-  const { state, dispatch } = useEmployee();
+  const { state: authState } = useAuth();
   const [files, setFiles] = useState<File[]>([]);
-  const [extractedRecords, setExtractedRecords] = useState<ZawilRecord[]>([]);
-  const [insertedRecords, setInsertedRecords] = useState<InsertedRecord[]>([]);
-  const [uploadHistory, setUploadHistory] = useState<UploadHistory[]>([]);
+  const [extractedRecords, setExtractedRecords] = useState<ZawilUploadRecord[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showPreview, setShowPreview] = useState<string | null>(null);
-  const [showResults, setShowResults] = useState(false);
-  const [existingRecords] = useState<Set<string>>(new Set()); // MOI Number + Issue Date combinations
 
   // Exact required columns as specified
   const requiredColumns = [
@@ -180,8 +140,8 @@ export const ZawilExcelUploader: React.FC = () => {
   };
 
   // Extract data from Excel worksheet with exact column validation
-  const extractDataFromWorksheet = (worksheet: XLSX.WorkSheet, fileName: string): ZawilRecord[] => {
-    const records: ZawilRecord[] = [];
+  const extractDataFromWorksheet = (worksheet: XLSX.WorkSheet, fileName: string): ZawilUploadRecord[] => {
+    const records: ZawilUploadRecord[] = [];
     
     try {
       // Convert worksheet to array of arrays
@@ -230,9 +190,8 @@ export const ZawilExcelUploader: React.FC = () => {
         const moiNumber = columnIndices.moiNumber >= 0 ? (row[columnIndices.moiNumber]?.toString().replace(/\D/g, '') || '') : '';
         const issueDate = columnIndices.issueDate >= 0 ? formatDate(row[columnIndices.issueDate]) : '';
         const expiryDate = columnIndices.expiryDate >= 0 ? formatDate(row[columnIndices.expiryDate]) : '';
-        const isDuplicate = checkDuplicate(moiNumber, issueDate);
 
-        const record: ZawilRecord = {
+        const record: ZawilUploadRecord = {
           id: `${fileName}-${rowIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           fileName,
           rowNumber: rowIndex + 1,
@@ -250,7 +209,6 @@ export const ZawilExcelUploader: React.FC = () => {
           expiryDate,
           status: 'success',
           errors: [],
-          isDuplicate
         };
 
         // Validate extracted data
@@ -276,9 +234,7 @@ export const ZawilExcelUploader: React.FC = () => {
 
         record.errors = errors;
         
-        if (isDuplicate) {
-          record.status = 'duplicate';
-        } else if (errors.length === 0) {
+        if (errors.length === 0) {
           record.status = 'success';
         } else if (errors.length <= 2) {
           record.status = 'warning';
@@ -384,7 +340,7 @@ export const ZawilExcelUploader: React.FC = () => {
   // Save records to database
   const saveToDatabase = async () => {
     const validRecords = extractedRecords.filter(record => 
-      record.status === 'success' || record.status === 'warning'
+      record.status !== 'error'
     );
 
     if (validRecords.length === 0) {
@@ -393,46 +349,26 @@ export const ZawilExcelUploader: React.FC = () => {
     }
 
     setIsSaving(true);
-    const inserted: InsertedRecord[] = [];
 
     try {
-      for (const record of validRecords) {
-        // Skip duplicates
-        if (record.isDuplicate) {
-          continue;
+      const result = await ZawilService.processZawilUpload(
+        validRecords,
+        authState.user?.username || 'Unknown User',
+        files.map(f => f.name).join(', ')
+      );
+
+      if (result.success) {
+        toast.success(result.message);
+        // Clear form after successful upload
+        setExtractedRecords([]);
+        setFiles([]);
+      } else {
+        toast.error(result.message);
+        if (result.errors.length > 0) {
+          console.error('Upload errors:', result.errors);
         }
-
-        // Add record to inserted list
-        inserted.push({
-          ...record,
-          insertedAt: new Date().toISOString(),
-          uploadedBy: 'Current User' // In real app, get from auth context
-        });
-
-        // Add to existing records set to prevent future duplicates
-        const key = `${record.moiNumber}-${record.issueDate}`;
-        existingRecords.add(key);
       }
-
-      // Add upload history
-      const historyEntry: UploadHistory = {
-        id: Date.now().toString(),
-        fileName: files.map(f => f.name).join(', '),
-        uploadedBy: 'Current User',
-        uploadedAt: new Date().toISOString(),
-        recordsCount: extractedRecords.length,
-        successCount: inserted.length,
-        errorCount: extractedRecords.filter(r => r.status === 'error').length
-      };
       
-      setUploadHistory(prev => [historyEntry, ...prev]);
-      setInsertedRecords(inserted);
-      toast.success(`Successfully saved ${inserted.length} records to database`);
-      setShowResults(true);
-      
-      // Clear extracted records after successful save
-      setExtractedRecords([]);
-      setFiles([]);
 
     } catch (error) {
       console.error('Error saving to database:', error);
@@ -446,8 +382,6 @@ export const ZawilExcelUploader: React.FC = () => {
   const clearAll = () => {
     setFiles([]);
     setExtractedRecords([]);
-    setInsertedRecords([]);
-    setShowResults(false);
     toast.success('All files cleared');
   };
 
@@ -521,128 +455,6 @@ export const ZawilExcelUploader: React.FC = () => {
         return 'bg-gray-50 border-gray-200';
     }
   };
-
-  if (showResults) {
-    return (
-      <div className="p-8 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Zawil Upload Results</h1>
-              <p className="text-gray-600">Successfully inserted {insertedRecords.length} records</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowResults(false)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Upload More Files
-              </button>
-              <button
-                onClick={clearAll}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Clear All
-              </button>
-            </div>
-          </div>
-
-          {/* Results Summary */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload Summary</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-600">{insertedRecords.length}</div>
-                <div className="text-sm text-green-700">Records Inserted</div>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="text-2xl font-bold text-blue-600">
-                  {uploadHistory.length}
-                </div>
-                <div className="text-sm text-blue-700">Upload Sessions</div>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <div className="text-2xl font-bold text-purple-600">
-                  {files.length}
-                </div>
-                <div className="text-sm text-purple-700">Files Processed</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Upload History */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload History</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">File Name</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Uploaded By</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Upload Date</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Total Records</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Success</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Errors</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploadHistory.map((entry) => (
-                    <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 font-medium">{entry.fileName}</td>
-                      <td className="py-3 px-4">{entry.uploadedBy}</td>
-                      <td className="py-3 px-4">{new Date(entry.uploadedAt).toLocaleString()}</td>
-                      <td className="py-3 px-4">{entry.recordsCount}</td>
-                      <td className="py-3 px-4 text-green-600">{entry.successCount}</td>
-                      <td className="py-3 px-4 text-red-600">{entry.errorCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Inserted Records Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Inserted Records</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Zawil Permit Id</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Permit Type</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">English Name</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">MOI Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Passport Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Nationality</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Issue Date</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Expiry Date</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Inserted At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {insertedRecords.map((record) => (
-                    <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 font-mono">{record.zawilPermitId}</td>
-                      <td className="py-3 px-4">{record.permitType}</td>
-                      <td className="py-3 px-4 font-medium">{record.englishName}</td>
-                      <td className="py-3 px-4 font-mono">{record.moiNumber}</td>
-                      <td className="py-3 px-4 font-mono">{record.passportNumber}</td>
-                      <td className="py-3 px-4">{record.nationality}</td>
-                      <td className="py-3 px-4">{record.issueDate}</td>
-                      <td className="py-3 px-4">{record.expiryDate}</td>
-                      <td className="py-3 px-4 text-xs text-gray-500">
-                        {new Date(record.insertedAt).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -755,7 +567,7 @@ export const ZawilExcelUploader: React.FC = () => {
               </div>
               <button
                 onClick={saveToDatabase}
-                disabled={isSaving || extractedRecords.filter(r => r.status !== 'error' && r.status !== 'duplicate').length === 0}
+                disabled={isSaving || extractedRecords.filter(r => r.status !== 'error').length === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? (
@@ -763,7 +575,7 @@ export const ZawilExcelUploader: React.FC = () => {
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                Save to Database ({extractedRecords.filter(r => r.status !== 'error' && r.status !== 'duplicate').length})
+                Save to Database ({extractedRecords.filter(r => r.status !== 'error').length})
               </button>
             </div>
 
@@ -844,10 +656,6 @@ export const ZawilExcelUploader: React.FC = () => {
                 <AlertCircle className="w-4 h-4 text-red-600" />
                 <span>Error: {extractedRecords.filter(r => r.status === 'error').length}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-blue-600" />
-                <span>Duplicate: {extractedRecords.filter(r => r.status === 'duplicate').length}</span>
-              </div>
             </div>
           </div>
         )}
@@ -882,13 +690,6 @@ export const ZawilExcelUploader: React.FC = () => {
                               <li key={index} className="text-sm text-red-600">{error}</li>
                             ))}
                           </ul>
-                        </div>
-                      )}
-                      {record.isDuplicate && (
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                          <p className="text-blue-800 text-sm">
-                            <strong>Duplicate Record:</strong> This combination of MOI Number ({record.moiNumber}) + Issue Date ({record.issueDate}) already exists in the database.
-                          </p>
                         </div>
                       )}
                       <div>
