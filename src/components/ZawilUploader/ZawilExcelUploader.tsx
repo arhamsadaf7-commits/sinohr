@@ -2,7 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
-import { useEmployee } from '../../context/EmployeeContext';
+import { ZawilService } from '../../services/zawilService';
+import { ZawilUploadRecord } from '../../types/zawil';
+import { useAuth } from '../../context/AuthContext';
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -17,48 +19,44 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-interface ZawilRecord {
-  id: string;
-  fileName: string;
-  rowNumber: number;
-  englishName: string;
-  iqamaNumber: string;
-  mobileNumber: string;
-  permitNumber: string;
-  permitType: string;
-  issuesDate: string;
-  expiryDate: string;
-  status: 'success' | 'error' | 'warning' | 'duplicate';
-  errors: string[];
-  isDuplicate?: boolean;
-}
-
-interface InsertedRecord extends ZawilRecord {
-  insertedAt: string;
-  employeeId?: string;
-  isNewEmployee?: boolean;
-}
-
 export const ZawilExcelUploader: React.FC = () => {
-  const { state, dispatch } = useEmployee();
+  const { state: authState } = useAuth();
   const [files, setFiles] = useState<File[]>([]);
-  const [extractedRecords, setExtractedRecords] = useState<ZawilRecord[]>([]);
-  const [insertedRecords, setInsertedRecords] = useState<InsertedRecord[]>([]);
+  const [extractedRecords, setExtractedRecords] = useState<ZawilUploadRecord[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [showPreview, setShowPreview] = useState<string | null>(null);
-  const [showResults, setShowResults] = useState(false);
-  const [existingPermitNumbers] = useState<Set<string>>(new Set()); // This would come from database
 
-  // Column mapping for different possible Excel headers
+  // Exact required columns as specified
+  const requiredColumns = [
+    'Zawil Permit Id',
+    'Permit Type',
+    'Issued for',
+    'Arabic Name',
+    'English Name',
+    'MOI Number',
+    'Passport Number',
+    'Nationality',
+    'Plate Number',
+    'Port Name',
+    'Issue Date',
+    'Expiry Date'
+  ];
+
+  // Column mapping for finding columns in Excel
   const columnMappings = {
-    englishName: ['english name', 'name', 'employee name', 'full name', 'worker name'],
-    iqamaNumber: ['iqama number', 'iqama', 'moi number', 'id number', 'national id'],
-    mobileNumber: ['mobile number', 'mobile', 'phone', 'contact', 'cell phone'],
-    permitNumber: ['permit number', 'permit no', 'license number', 'license no'],
-    permitType: ['permit type', 'type', 'license type', 'permit category'],
-    issuesDate: ['issues date', 'issue date', 'issued date', 'start date'],
+    zawilPermitId: ['zawil permit id', 'permit id', 'zawil id'],
+    permitType: ['permit type', 'type'],
+    issuedFor: ['issued for', 'issued to'],
+    arabicName: ['arabic name', 'name arabic'],
+    englishName: ['english name', 'name english'],
+    moiNumber: ['moi number', 'iqama number', 'national id'],
+    passportNumber: ['passport number', 'passport no'],
+    nationality: ['nationality', 'country'],
+    plateNumber: ['plate number', 'plate no', 'vehicle number'],
+    portName: ['port name', 'port'],
+    issueDate: ['issue date', 'issued date', 'start date'],
     expiryDate: ['expiry date', 'expire date', 'end date', 'valid until']
   };
 
@@ -71,6 +69,30 @@ export const ZawilExcelUploader: React.FC = () => {
       }
     }
     return -1;
+  };
+
+  // Validate required columns are present
+  const validateColumns = (headers: string[]): { isValid: boolean; missingColumns: string[] } => {
+    const normalizedHeaders = headers.map(h => h?.toString().toLowerCase().trim() || '');
+    const missingColumns: string[] = [];
+
+    for (const requiredCol of requiredColumns) {
+      const fieldKey = Object.keys(columnMappings).find(key => 
+        requiredCol.toLowerCase().includes(key.toLowerCase().replace(/([A-Z])/g, ' $1').trim())
+      ) as keyof typeof columnMappings;
+      
+      if (fieldKey) {
+        const columnIndex = findColumnIndex(normalizedHeaders, columnMappings[fieldKey]);
+        if (columnIndex === -1) {
+          missingColumns.push(requiredCol);
+        }
+      }
+    }
+
+    return {
+      isValid: missingColumns.length === 0,
+      missingColumns
+    };
   };
 
   // Format date from Excel serial number or string
@@ -104,33 +126,22 @@ export const ZawilExcelUploader: React.FC = () => {
     }
   };
 
-  // Normalize mobile number to Saudi format
-  const normalizeMobileNumber = (mobile: string): string => {
-    if (!mobile) return '';
-    
-    const cleaned = mobile.toString().replace(/\D/g, '');
-    
-    if (cleaned.startsWith('966')) {
-      return '0' + cleaned.substring(3);
-    } else if (cleaned.startsWith('+966')) {
-      return '0' + cleaned.substring(4);
-    } else if (cleaned.length === 9 && cleaned.startsWith('5')) {
-      return '0' + cleaned;
-    } else if (cleaned.length === 10 && cleaned.startsWith('05')) {
-      return cleaned;
-    }
-    
-    return mobile;
+  // Validate date format
+  const isValidDate = (dateString: string): boolean => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    return !isNaN(date.getTime());
   };
 
-  // Check if permit number already exists
-  const checkDuplicatePermit = (permitNumber: string): boolean => {
-    return existingPermitNumbers.has(permitNumber);
+  // Check for duplicates based on MOI Number + Issue Date
+  const checkDuplicate = (moiNumber: string, issueDate: string): boolean => {
+    const key = `${moiNumber}-${issueDate}`;
+    return existingRecords.has(key);
   };
 
-  // Extract data from Excel worksheet
-  const extractDataFromWorksheet = (worksheet: XLSX.WorkSheet, fileName: string): ZawilRecord[] => {
-    const records: ZawilRecord[] = [];
+  // Extract data from Excel worksheet with exact column validation
+  const extractDataFromWorksheet = (worksheet: XLSX.WorkSheet, fileName: string): ZawilUploadRecord[] => {
+    const records: ZawilUploadRecord[] = [];
     
     try {
       // Convert worksheet to array of arrays
@@ -142,17 +153,29 @@ export const ZawilExcelUploader: React.FC = () => {
       }
 
       // Get headers from first row
-      const headers = data[0].map((h: any) => h?.toString().toLowerCase().trim() || '');
+      const headers = data[0].map((h: any) => h?.toString().trim() || '');
       
+      // Validate required columns
+      const validation = validateColumns(headers);
+      if (!validation.isValid) {
+        toast.error(`${fileName}: Missing required columns: ${validation.missingColumns.join(', ')}`);
+        return records;
+      }
+
       // Find column indices
       const columnIndices = {
-        englishName: findColumnIndex(headers, columnMappings.englishName),
-        iqamaNumber: findColumnIndex(headers, columnMappings.iqamaNumber),
-        mobileNumber: findColumnIndex(headers, columnMappings.mobileNumber),
-        permitNumber: findColumnIndex(headers, columnMappings.permitNumber),
-        permitType: findColumnIndex(headers, columnMappings.permitType),
-        issuesDate: findColumnIndex(headers, columnMappings.issuesDate),
-        expiryDate: findColumnIndex(headers, columnMappings.expiryDate)
+        zawilPermitId: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.zawilPermitId),
+        permitType: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.permitType),
+        issuedFor: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.issuedFor),
+        arabicName: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.arabicName),
+        englishName: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.englishName),
+        moiNumber: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.moiNumber),
+        passportNumber: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.passportNumber),
+        nationality: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.nationality),
+        plateNumber: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.plateNumber),
+        portName: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.portName),
+        issueDate: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.issueDate),
+        expiryDate: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.expiryDate)
       };
 
       // Process data rows (skip header row)
@@ -164,40 +187,54 @@ export const ZawilExcelUploader: React.FC = () => {
           continue;
         }
 
-        const permitNumber = columnIndices.permitNumber >= 0 ? (row[columnIndices.permitNumber]?.toString().trim() || '') : '';
-        const isDuplicate = permitNumber ? checkDuplicatePermit(permitNumber) : false;
+        const moiNumber = columnIndices.moiNumber >= 0 ? (row[columnIndices.moiNumber]?.toString().replace(/\D/g, '') || '') : '';
+        const issueDate = columnIndices.issueDate >= 0 ? formatDate(row[columnIndices.issueDate]) : '';
+        const expiryDate = columnIndices.expiryDate >= 0 ? formatDate(row[columnIndices.expiryDate]) : '';
 
-        const record: ZawilRecord = {
+        const record: ZawilUploadRecord = {
           id: `${fileName}-${rowIndex}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           fileName,
           rowNumber: rowIndex + 1,
-          englishName: columnIndices.englishName >= 0 ? (row[columnIndices.englishName]?.toString().trim() || '') : '',
-          iqamaNumber: columnIndices.iqamaNumber >= 0 ? (row[columnIndices.iqamaNumber]?.toString().replace(/\D/g, '') || '') : '',
-          mobileNumber: columnIndices.mobileNumber >= 0 ? normalizeMobileNumber(row[columnIndices.mobileNumber]?.toString() || '') : '',
-          permitNumber,
+          zawilPermitId: columnIndices.zawilPermitId >= 0 ? (row[columnIndices.zawilPermitId]?.toString().trim() || '') : '',
           permitType: columnIndices.permitType >= 0 ? (row[columnIndices.permitType]?.toString().trim() || '') : '',
-          issuesDate: columnIndices.issuesDate >= 0 ? formatDate(row[columnIndices.issuesDate]) : '',
-          expiryDate: columnIndices.expiryDate >= 0 ? formatDate(row[columnIndices.expiryDate]) : '',
+          issuedFor: columnIndices.issuedFor >= 0 ? (row[columnIndices.issuedFor]?.toString().trim() || '') : '',
+          arabicName: columnIndices.arabicName >= 0 ? (row[columnIndices.arabicName]?.toString().trim() || '') : '',
+          englishName: columnIndices.englishName >= 0 ? (row[columnIndices.englishName]?.toString().trim() || '') : '',
+          moiNumber,
+          passportNumber: columnIndices.passportNumber >= 0 ? (row[columnIndices.passportNumber]?.toString().trim() || '') : '',
+          nationality: columnIndices.nationality >= 0 ? (row[columnIndices.nationality]?.toString().trim() || '') : '',
+          plateNumber: columnIndices.plateNumber >= 0 ? (row[columnIndices.plateNumber]?.toString().trim() || '') : '',
+          portName: columnIndices.portName >= 0 ? (row[columnIndices.portName]?.toString().trim() || '') : '',
+          issueDate,
+          expiryDate,
           status: 'success',
           errors: [],
-          isDuplicate
         };
 
         // Validate extracted data
         const errors: string[] = [];
         
-        if (!record.englishName) errors.push('English name missing');
-        if (!record.iqamaNumber || record.iqamaNumber.length !== 10) errors.push('Valid Iqama number missing');
-        if (!record.mobileNumber) errors.push('Mobile number missing');
-        if (!record.permitNumber) errors.push('Permit number missing');
-        if (!record.permitType) errors.push('Permit type missing');
-        if (!record.expiryDate) errors.push('Expiry date missing');
+        if (!record.zawilPermitId) errors.push('Zawil Permit Id missing');
+        if (!record.permitType) errors.push('Permit Type missing');
+        if (!record.issuedFor) errors.push('Issued for missing');
+        if (!record.englishName) errors.push('English Name missing');
+        if (!record.moiNumber || record.moiNumber.length !== 10) errors.push('Valid MOI Number missing (10 digits)');
+        if (!record.passportNumber) errors.push('Passport Number missing');
+        if (!record.nationality) errors.push('Nationality missing');
+        if (!record.portName) errors.push('Port Name missing');
+        if (!record.issueDate || !isValidDate(record.issueDate)) errors.push('Valid Issue Date missing');
+        if (!record.expiryDate || !isValidDate(record.expiryDate)) errors.push('Valid Expiry Date missing');
+
+        // Validate date logic
+        if (record.issueDate && record.expiryDate && isValidDate(record.issueDate) && isValidDate(record.expiryDate)) {
+          if (new Date(record.issueDate) >= new Date(record.expiryDate)) {
+            errors.push('Issue Date must be before Expiry Date');
+          }
+        }
 
         record.errors = errors;
         
-        if (isDuplicate) {
-          record.status = 'duplicate';
-        } else if (errors.length === 0) {
+        if (errors.length === 0) {
           record.status = 'success';
         } else if (errors.length <= 2) {
           record.status = 'warning';
@@ -300,52 +337,10 @@ export const ZawilExcelUploader: React.FC = () => {
     toast.success('Record removed');
   };
 
-  // Check if Iqama number matches existing employee
-  const findEmployeeByIqama = (iqamaNumber: string) => {
-    return state.employees.find(emp => {
-      const empDocs = state.documents.find(doc => doc.employeeId === emp.id);
-      return empDocs?.iqamaNumber === iqamaNumber;
-    });
-  };
-
-  // Create new employee from Zawil data
-  const createEmployeeFromZawil = (record: ZawilRecord) => {
-    const newEmployeeId = `EMP${Date.now()}`;
-    
-    // Create employee
-    const newEmployee = {
-      id: newEmployeeId,
-      companyId: '', // Will need to be set based on company name or default
-      fullName: record.englishName,
-      gender: 'Male' as const, // Default, can be updated later
-      dateOfBirth: '', // Not available in Zawil data
-      nationality: '', // Not available in Zawil data
-      maritalStatus: 'Single' as const, // Default
-      contactNumber: record.mobileNumber,
-      email: '', // Not available in Zawil data
-      address: '' // Not available in Zawil data
-    };
-
-    // Create documents with Iqama number
-    const newDocuments = {
-      employeeId: newEmployeeId,
-      passportNumber: '',
-      passportExpiryDate: '',
-      iqamaNumber: record.iqamaNumber,
-      iqamaIssueDate: '',
-      iqamaExpiryDate: '',
-      visaNumber: '',
-      insurancePolicyNumber: '',
-      bankAccount: ''
-    };
-
-    return { employee: newEmployee, documents: newDocuments };
-  };
-
-  // Save records to database with duplicate handling and Zawil expiry logic
+  // Save records to database
   const saveToDatabase = async () => {
     const validRecords = extractedRecords.filter(record => 
-      record.status === 'success' || record.status === 'warning'
+      record.status !== 'error'
     );
 
     if (validRecords.length === 0) {
@@ -354,80 +349,26 @@ export const ZawilExcelUploader: React.FC = () => {
     }
 
     setIsSaving(true);
-    const inserted: InsertedRecord[] = [];
 
     try {
-      for (const record of validRecords) {
-        // Skip duplicates
-        if (record.isDuplicate) {
-          continue;
+      const result = await ZawilService.processZawilUpload(
+        validRecords,
+        authState.user?.username || 'Unknown User',
+        files.map(f => f.name).join(', ')
+      );
+
+      if (result.success) {
+        toast.success(result.message);
+        // Clear form after successful upload
+        setExtractedRecords([]);
+        setFiles([]);
+      } else {
+        toast.error(result.message);
+        if (result.errors.length > 0) {
+          console.error('Upload errors:', result.errors);
         }
-
-        // Check if Iqama number matches existing employee
-        const existingEmployee = findEmployeeByIqama(record.iqamaNumber);
-        
-        let employeeId: string;
-        let isNewEmployee = false;
-
-        if (existingEmployee) {
-          // Use existing employee
-          employeeId = existingEmployee.id;
-        } else {
-          // Create new employee from Zawil data
-          const { employee, documents } = createEmployeeFromZawil(record);
-          
-          // Add employee to context
-          dispatch({ type: 'ADD_EMPLOYEE', payload: employee });
-          dispatch({ type: 'ADD_DOCUMENTS', payload: documents });
-          
-          employeeId = employee.id;
-          isNewEmployee = true;
-        }
-
-        // Add Zawil record to database (this would be a new Zawil table)
-        // For now, we'll simulate this by adding to skills/experience
-        const zawilData = {
-          employeeId,
-          skills: `Zawil Permit: ${record.permitType}`,
-          previousExperience: `Permit Number: ${record.permitNumber}`,
-          trainingCourses: `Issues Date: ${record.issuesDate}`,
-          remarks: `Expiry Date: ${record.expiryDate} (Zawil Data)`
-        };
-
-        // Check if skills/experience already exists for this employee
-        const existingSkills = state.skillsExperiences.find(se => se.employeeId === employeeId);
-        if (existingSkills) {
-          // Update existing
-          const updatedSkills = {
-            ...existingSkills,
-            skills: existingSkills.skills ? `${existingSkills.skills}, ${zawilData.skills}` : zawilData.skills,
-            remarks: existingSkills.remarks ? `${existingSkills.remarks}\n${zawilData.remarks}` : zawilData.remarks
-          };
-          dispatch({ type: 'UPDATE_SKILLS_EXPERIENCE', payload: updatedSkills });
-        } else {
-          // Add new
-          dispatch({ type: 'ADD_SKILLS_EXPERIENCE', payload: zawilData });
-        }
-
-        // Add to inserted records
-        inserted.push({
-          ...record,
-          insertedAt: new Date().toISOString(),
-          employeeId,
-          isNewEmployee
-        });
-
-        // Add permit number to existing set to prevent future duplicates
-        existingPermitNumbers.add(record.permitNumber);
       }
-
-      setInsertedRecords(inserted);
-      toast.success(`Successfully saved ${inserted.length} records to database`);
-      setShowResults(true);
       
-      // Clear extracted records after successful save
-      setExtractedRecords([]);
-      setFiles([]);
 
     } catch (error) {
       console.error('Error saving to database:', error);
@@ -441,17 +382,41 @@ export const ZawilExcelUploader: React.FC = () => {
   const clearAll = () => {
     setFiles([]);
     setExtractedRecords([]);
-    setInsertedRecords([]);
-    setShowResults(false);
     toast.success('All files cleared');
   };
 
-  // Export sample Excel template
+  // Export sample Excel template with exact columns
   const downloadTemplate = () => {
     const templateData = [
-      ['English Name', 'Iqama Number', 'Mobile Number', 'Permit Number', 'Permit Type', 'Issues Date', 'Expiry Date'],
-      ['John Doe', '1234567890', '0501234567', 'PRM123456', 'Work Permit', '2024-01-01', '2024-12-31'],
-      ['Jane Smith', '0987654321', '0509876543', 'PRM789012', 'Business License', '2024-02-01', '2025-01-31']
+      requiredColumns,
+      [
+        'ZWL001',
+        'Work Permit',
+        'Individual',
+        'أحمد محمد علي',
+        'Ahmed Mohammed Ali',
+        '1234567890',
+        'A12345678',
+        'Saudi Arabia',
+        'ABC-1234',
+        'King Abdulaziz Port',
+        '2024-01-01',
+        '2024-12-31'
+      ],
+      [
+        'ZWL002',
+        'Business License',
+        'Company',
+        'فاطمة أحمد سالم',
+        'Fatima Ahmed Salem',
+        '0987654321',
+        'B87654321',
+        'Egypt',
+        'XYZ-5678',
+        'Jeddah Islamic Port',
+        '2024-02-01',
+        '2025-01-31'
+      ]
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -491,116 +456,28 @@ export const ZawilExcelUploader: React.FC = () => {
     }
   };
 
-  if (showResults) {
-    return (
-      <div className="p-8 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Zawil Upload Results</h1>
-              <p className="text-gray-600">Successfully inserted {insertedRecords.length} records</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowResults(false)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Upload More Files
-              </button>
-              <button
-                onClick={clearAll}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Clear All
-              </button>
-            </div>
-          </div>
-
-          {/* Results Summary */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Upload Summary</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-600">{insertedRecords.length}</div>
-                <div className="text-sm text-green-700">Records Inserted</div>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="text-2xl font-bold text-blue-600">
-                  {insertedRecords.filter(r => r.isNewEmployee).length}
-                </div>
-                <div className="text-sm text-blue-700">New Employees Created</div>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <div className="text-2xl font-bold text-purple-600">
-                  {insertedRecords.filter(r => !r.isNewEmployee).length}
-                </div>
-                <div className="text-sm text-purple-700">Existing Employees Updated</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Inserted Records Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Inserted Records</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">English Name</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Iqama Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Mobile Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Permit Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Permit Type</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Expiry Date</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Employee Status</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Inserted At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {insertedRecords.map((record) => (
-                    <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                          <span className="text-xs text-green-600">Inserted</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-medium">{record.englishName}</td>
-                      <td className="py-3 px-4 font-mono">{record.iqamaNumber}</td>
-                      <td className="py-3 px-4 font-mono">{record.mobileNumber}</td>
-                      <td className="py-3 px-4 font-mono">{record.permitNumber}</td>
-                      <td className="py-3 px-4">{record.permitType}</td>
-                      <td className="py-3 px-4">{record.expiryDate}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          record.isNewEmployee 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {record.isNewEmployee ? 'New Employee' : 'Existing Employee'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-500">
-                        {new Date(record.insertedAt).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Zawil Excel Uploader</h1>
-          <p className="text-gray-600">Upload and extract employee permit data from Excel files with duplicate handling</p>
+          <p className="text-gray-600">Upload Zawil permit data with exact column validation and duplicate prevention</p>
+        </div>
+
+        {/* Required Columns Info */}
+        <div className="bg-blue-50 rounded-xl border border-blue-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-blue-900 mb-3">Required Excel Columns</h2>
+          <p className="text-blue-800 mb-3">Your Excel file must contain exactly these columns in any order:</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {requiredColumns.map((col, index) => (
+              <div key={index} className="bg-white px-3 py-2 rounded border border-blue-200">
+                <span className="text-sm font-medium text-blue-900">{col}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-blue-700 text-sm mt-3">
+            <strong>Note:</strong> Duplicates are checked using MOI Number + Issue Date combination.
+          </p>
         </div>
 
         {/* File Upload Section */}
@@ -690,7 +567,7 @@ export const ZawilExcelUploader: React.FC = () => {
               </div>
               <button
                 onClick={saveToDatabase}
-                disabled={isSaving || extractedRecords.filter(r => r.status !== 'error' && r.status !== 'duplicate').length === 0}
+                disabled={isSaving || extractedRecords.filter(r => r.status !== 'error').length === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? (
@@ -698,7 +575,7 @@ export const ZawilExcelUploader: React.FC = () => {
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                Save to Database ({extractedRecords.filter(r => r.status !== 'error' && r.status !== 'duplicate').length})
+                Save to Database ({extractedRecords.filter(r => r.status !== 'error').length})
               </button>
             </div>
 
@@ -708,12 +585,13 @@ export const ZawilExcelUploader: React.FC = () => {
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Row</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">English Name</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Iqama Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Mobile Number</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Permit Number</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Zawil Permit Id</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Permit Type</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-700">Issues Date</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">English Name</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">MOI Number</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Passport Number</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Nationality</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Issue Date</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Expiry Date</th>
                     <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
                   </tr>
@@ -730,16 +608,13 @@ export const ZawilExcelUploader: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-center">{record.rowNumber}</td>
-                      <td className="py-3 px-4">
-                        <div className="max-w-32 truncate" title={record.englishName}>
-                          {record.englishName || '-'}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-mono">{record.iqamaNumber || '-'}</td>
-                      <td className="py-3 px-4 font-mono">{record.mobileNumber || '-'}</td>
-                      <td className="py-3 px-4 font-mono">{record.permitNumber || '-'}</td>
+                      <td className="py-3 px-4 font-mono">{record.zawilPermitId || '-'}</td>
                       <td className="py-3 px-4">{record.permitType || '-'}</td>
-                      <td className="py-3 px-4">{record.issuesDate || '-'}</td>
+                      <td className="py-3 px-4">{record.englishName || '-'}</td>
+                      <td className="py-3 px-4 font-mono">{record.moiNumber || '-'}</td>
+                      <td className="py-3 px-4 font-mono">{record.passportNumber || '-'}</td>
+                      <td className="py-3 px-4">{record.nationality || '-'}</td>
+                      <td className="py-3 px-4">{record.issueDate || '-'}</td>
                       <td className="py-3 px-4">{record.expiryDate || '-'}</td>
                       <td className="py-3 px-4">
                         <div className="flex gap-2">
@@ -781,10 +656,6 @@ export const ZawilExcelUploader: React.FC = () => {
                 <AlertCircle className="w-4 h-4 text-red-600" />
                 <span>Error: {extractedRecords.filter(r => r.status === 'error').length}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-blue-600" />
-                <span>Duplicate: {extractedRecords.filter(r => r.status === 'duplicate').length}</span>
-              </div>
             </div>
           </div>
         )}
@@ -792,7 +663,7 @@ export const ZawilExcelUploader: React.FC = () => {
         {/* Error Preview Modal */}
         {showPreview && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden">
               <div className="flex justify-between items-center p-6 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">Record Details</h3>
                 <button
@@ -802,7 +673,7 @@ export const ZawilExcelUploader: React.FC = () => {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-6">
+              <div className="p-6 overflow-y-auto max-h-96">
                 {(() => {
                   const record = extractedRecords.find(r => r.id === showPreview);
                   return record ? (
@@ -813,7 +684,7 @@ export const ZawilExcelUploader: React.FC = () => {
                       </div>
                       {record.errors.length > 0 && (
                         <div>
-                          <h4 className="font-medium text-gray-900 mb-2">Errors:</h4>
+                          <h4 className="font-medium text-gray-900 mb-2">Validation Errors:</h4>
                           <ul className="list-disc list-inside space-y-1">
                             {record.errors.map((error, index) => (
                               <li key={index} className="text-sm text-red-600">{error}</li>
@@ -821,23 +692,23 @@ export const ZawilExcelUploader: React.FC = () => {
                           </ul>
                         </div>
                       )}
-                      {record.isDuplicate && (
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                          <p className="text-blue-800 text-sm">
-                            <strong>Duplicate Permit Number:</strong> This permit number already exists in the database and will be skipped during insertion.
-                          </p>
-                        </div>
-                      )}
                       <div>
                         <h4 className="font-medium text-gray-900 mb-2">Extracted Data:</h4>
                         <div className="bg-gray-50 p-4 rounded-lg text-sm space-y-2">
-                          <p><strong>English Name:</strong> {record.englishName || 'Not found'}</p>
-                          <p><strong>Iqama Number:</strong> {record.iqamaNumber || 'Not found'}</p>
-                          <p><strong>Mobile Number:</strong> {record.mobileNumber || 'Not found'}</p>
-                          <p><strong>Permit Number:</strong> {record.permitNumber || 'Not found'}</p>
-                          <p><strong>Permit Type:</strong> {record.permitType || 'Not found'}</p>
-                          <p><strong>Issues Date:</strong> {record.issuesDate || 'Not found'}</p>
-                          <p><strong>Expiry Date:</strong> {record.expiryDate || 'Not found'}</p>
+                          <div className="grid grid-cols-2 gap-4">
+                            <p><strong>Zawil Permit Id:</strong> {record.zawilPermitId || 'Not found'}</p>
+                            <p><strong>Permit Type:</strong> {record.permitType || 'Not found'}</p>
+                            <p><strong>Issued for:</strong> {record.issuedFor || 'Not found'}</p>
+                            <p><strong>Arabic Name:</strong> {record.arabicName || 'Not found'}</p>
+                            <p><strong>English Name:</strong> {record.englishName || 'Not found'}</p>
+                            <p><strong>MOI Number:</strong> {record.moiNumber || 'Not found'}</p>
+                            <p><strong>Passport Number:</strong> {record.passportNumber || 'Not found'}</p>
+                            <p><strong>Nationality:</strong> {record.nationality || 'Not found'}</p>
+                            <p><strong>Plate Number:</strong> {record.plateNumber || 'Not found'}</p>
+                            <p><strong>Port Name:</strong> {record.portName || 'Not found'}</p>
+                            <p><strong>Issue Date:</strong> {record.issueDate || 'Not found'}</p>
+                            <p><strong>Expiry Date:</strong> {record.expiryDate || 'Not found'}</p>
+                          </div>
                         </div>
                       </div>
                     </div>

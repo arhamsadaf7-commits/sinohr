@@ -59,11 +59,22 @@ export interface ExpiryItem {
   id: string;
   employeeId: string;
   employeeName: string;
-  documentType: 'iqama' | 'passport' | 'insurance' | 'license' | 'visa';
+  documentType: 'iqama' | 'passport' | 'insurance' | 'license' | 'visa' | 'zawil';
   documentNumber: string;
   expiryDate: string;
   daysUntilExpiry: number;
   status: 'expired' | 'expiring-soon' | 'expiring-later' | 'valid';
+  // Zawil-specific fields
+  zawilPermitId?: string;
+  permitType?: string;
+  issuedFor?: string;
+  arabicName?: string;
+  moiNumber?: string;
+  passportNumber?: string;
+  nationality?: string;
+  plateNumber?: string;
+  portName?: string;
+  issueDate?: string;
 }
 
 export interface ExpiryStats {
@@ -74,6 +85,7 @@ export interface ExpiryStats {
 }
 
 export interface DashboardData {
+  zawil: ExpiryStats & { items: ExpiryItem[] };
   iqama: ExpiryStats & { items: ExpiryItem[] };
   passport: ExpiryStats & { items: ExpiryItem[] };
   insurance: ExpiryStats & { items: ExpiryItem[] };

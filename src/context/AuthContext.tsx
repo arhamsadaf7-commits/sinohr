@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { User, AuthState, LoginCredentials, SignupData } from '../types/auth';
+import { supabase } from '../lib/supabase';
 
 interface AuthContextType {
   state: AuthState;
@@ -59,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (token) {
-      // Simulate token validation
+      // Use stored token to restore session
       const mockUser: User = {
         id: '1',
         username: 'admin',
@@ -91,8 +92,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dispatch({ type: 'LOGIN_START' });
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Try Supabase authentication first
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
+        });
+        
+        if (error) throw error;
+        
+        if (data.user) {
+          // Handle Supabase user
+          const token = data.session?.access_token || 'supabase_token';
+          localStorage.setItem('auth_token', token);
+          
+          const supabaseUser: User = {
+            id: data.user.id,
+            username: data.user.email?.split('@')[0] || 'user',
+            email: data.user.email || '',
+            role: {
+              id: '1',
+              name: 'User',
+              description: 'Standard user access',
+              permissions: [
+                { id: '1', module: 'HR', action: 'read', resource: 'employees' },
+              ],
+            },
+            permissions: [],
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastLogin: new Date().toISOString(),
+          };
+          
+          dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
+          return;
+        }
+      } catch (supabaseError) {
+        console.log('Supabase auth failed, trying mock auth:', supabaseError);
+      }
+      
+      // Fallback to mock authentication
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       if (credentials.email === 'admin@company.com' && credentials.password === 'admin123') {
         const mockUser: User = {
@@ -122,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('auth_token', token);
         dispatch({ type: 'LOGIN_SUCCESS', payload: { user: mockUser, token } });
       } else {
-        throw new Error('Invalid credentials');
+        throw new Error('Invalid credentials. Use admin@company.com / admin123 for demo.');
       }
     } catch (error) {
       dispatch({ type: 'LOGIN_FAILURE' });
@@ -132,7 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signup = async (data: SignupData) => {
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     if (data.password !== data.confirmPassword) {
       throw new Error('Passwords do not match');
@@ -144,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     localStorage.removeItem('auth_token');
+    supabase.auth.signOut(); // Also sign out from Supabase
     dispatch({ type: 'LOGOUT' });
   };
 
@@ -154,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfile = async (data: Partial<User>) => {
-    // Simulate API call
+    // Simulate profile update
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     if (state.user) {
