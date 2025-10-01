@@ -335,6 +335,10 @@ export class ZawilService {
         })
         .eq('upload_id', uploadLog.upload_id);
 
+      // Trigger dashboard refresh
+      localStorage.setItem('zawil_data_updated', Date.now().toString());
+      window.dispatchEvent(new CustomEvent('zawil_data_updated', { detail: 'zawil_data_updated' }));
+
       return {
         success: true,
         message: `Upload completed: ${insertedCount} inserted, ${skippedCount} skipped`,

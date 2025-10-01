@@ -7,14 +7,23 @@ import { ExpiryDashboard } from './ExpiryDashboard';
 import { UserManagement } from './UserManagement';
 import { EmployeeProvider } from '../../context/EmployeeContext';
 
-export const AdminApp: React.FC = () => {
+interface AdminAppProps {
+  onBackToDashboard?: () => void;
+}
+
+export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
   const { state } = useAuth();
   const [activePage, setActivePage] = useState('expiry-dashboard');
 
   const handleBackToDashboard = () => {
-    window.history.pushState({}, '', '/');
-    window.location.reload();
+    if (onBackToDashboard) {
+      onBackToDashboard();
+    } else {
+      window.history.pushState({}, '', '/');
+      window.location.reload();
+    }
   };
+
   if (state.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -74,6 +83,7 @@ export const AdminApp: React.FC = () => {
           <AdminNavigation 
             activePage={activePage} 
             onPageChange={setActivePage}
+            onBackToDashboard={handleBackToDashboard}
           />
         </div>
         <div className="flex-1 overflow-auto">

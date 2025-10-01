@@ -59,8 +59,15 @@ function App() {
     window.history.pushState({}, '', window.location.pathname);
   };
 
+  const handleBackToDashboard = () => {
+    setShowAdminPanel(false);
+    setActivePage('dashboard');
+    // Update URL without triggering logout
+    window.history.pushState({}, '', '/');
+  };
+
   if (showAdminPanel) {
-    return <AdminApp />;
+    return <AdminApp onBackToDashboard={handleBackToDashboard} />;
   }
 
   if (authState.loading) {

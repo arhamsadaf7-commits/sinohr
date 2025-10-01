@@ -53,10 +53,35 @@ export const ExpiryDashboard: React.FC = () => {
   const [completedItems, setCompletedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Load data on component mount
   useEffect(() => {
     loadData();
+  }, [refreshTrigger]);
+
+  // Listen for data changes from uploads
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'zawil_data_updated') {
+        setRefreshTrigger(prev => prev + 1);
+        localStorage.removeItem('zawil_data_updated');
+      }
+    };
+
+    const handleCustomEvent = (e: CustomEvent) => {
+      if (e.detail === 'zawil_data_updated') {
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('zawil_data_updated' as any, handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('zawil_data_updated' as any, handleCustomEvent);
+    };
   }, []);
 
   const loadData = async () => {

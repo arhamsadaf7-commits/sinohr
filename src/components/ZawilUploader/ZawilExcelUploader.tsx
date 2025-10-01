@@ -362,6 +362,10 @@ export const ZawilExcelUploader: React.FC = () => {
         // Clear form after successful upload
         setExtractedRecords([]);
         setFiles([]);
+        
+        // Trigger dashboard refresh
+        localStorage.setItem('zawil_data_updated', Date.now().toString());
+        window.dispatchEvent(new CustomEvent('zawil_data_updated', { detail: 'zawil_data_updated' }));
       } else {
         toast.error(result.message);
         if (result.errors.length > 0) {

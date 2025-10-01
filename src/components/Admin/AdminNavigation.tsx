@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 interface AdminNavigationProps {
   activePage: string;
   onPageChange: (page: string) => void;
+  onBackToDashboard?: () => void;
 }
 
 const navigationItems = [
@@ -27,7 +28,8 @@ const navigationItems = [
 
 export const AdminNavigation: React.FC<AdminNavigationProps> = ({ 
   activePage, 
-  onPageChange 
+  onPageChange,
+  onBackToDashboard
 }) => {
   const { state, logout, checkPermission } = useAuth();
 
@@ -36,9 +38,14 @@ export const AdminNavigation: React.FC<AdminNavigationProps> = ({
   };
 
   const handleBackToDashboard = () => {
-    window.history.pushState({}, '', '/');
-    window.location.reload();
+    if (onBackToDashboard) {
+      onBackToDashboard();
+    } else {
+      window.history.pushState({}, '', '/');
+      window.location.reload();
+    }
   };
+
   return (
     <nav className="bg-white border-r border-gray-200 shadow-sm h-full">
       <div className="p-6">
