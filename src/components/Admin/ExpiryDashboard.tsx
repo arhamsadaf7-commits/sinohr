@@ -539,10 +539,10 @@ export const ExpiryDashboard: React.FC = () => {
                   <th className="px-4 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={currentData.length > 0 && selectedItems.size === currentData.length}
+                     checked={filteredItems.length > 0 && selectedItems.size === filteredItems.length}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedItems(new Set(currentData.map(item => item.id)));
+                         setSelectedItems(new Set(filteredItems.map(item => item.id)));
                         } else {
                           setSelectedItems(new Set());
                         }
