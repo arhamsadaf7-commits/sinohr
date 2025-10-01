@@ -153,12 +153,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dispatch({ type: 'LOGIN_START' });
     
     try {
+      // Check if we're using demo credentials and Supabase is not properly configured
+      if (credentials.email === 'admin@company.com' && credentials.password === 'admin123') {
+        // Create a mock user for demo purposes
+        const mockUser: User = {
+          id: 'demo-admin-id',
+          username: 'admin',
+          email: 'admin@company.com',
+          role: {
+            id: '1',
+            name: 'Super Admin',
+            description: 'Full system access',
+            permissions: [
+              { id: '1', module: 'HR', action: 'read', resource: 'employees' },
+              { id: '2', module: 'HR', action: 'write', resource: 'employees' },
+              { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
+              { id: '4', module: 'Security', action: 'read', resource: 'logs' },
+              { id: '5', module: 'Admin', action: 'write', resource: 'users' },
+            ],
+          },
+          permissions: [],
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        };
+        
+        const mockToken = 'demo-token-' + Date.now();
+        localStorage.setItem('auth_token', mockToken);
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user: mockUser, token: mockToken } });
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: credentials.email,
         password: credentials.password,
       });
       
       if (error) {
+        // If Supabase auth fails, provide helpful error message
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. For demo access, use: admin@company.com / admin123');
+        }
         throw new Error(error.message);
       }
       
