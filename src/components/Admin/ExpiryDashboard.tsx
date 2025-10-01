@@ -1,32 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ZawilService } from '../../services/zawilService';
 import { ZawilPermit, UploadLog } from '../../types/zawil';
-import { 
-  Calendar, 
-  AlertTriangle, 
-  Clock, 
-  CheckCircle, 
-  Search, 
-  Filter,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  CreditCard,
-  Shield,
-  Car,
-  Eye,
-  Edit,
-  Check,
-  Download,
-  X,
-  User,
-  Phone,
-  Mail,
-  Building,
-  MapPin,
-  Archive,
-  Loader2
-} from 'lucide-react';
+import { Calendar, AlertTriangle, Clock, CheckCircle, Search, Filter, ChevronDown, ChevronUp, FileText, CreditCard, Shield, Car, Eye, CreditCard as Edit, Check, Download, X, User, Phone, Mail, Building, MapPin, Archive, Loader2 } from 'lucide-react';
 import { ExpiryItem, ExpiryStats } from '../../types/auth';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
