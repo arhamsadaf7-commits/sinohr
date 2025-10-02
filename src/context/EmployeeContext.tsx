@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { Company, Employee, JobInfo, OfficialDocuments, EmergencyContact, SkillsExperience } from '../types/employee';
+import { ZawilService } from '../services/zawilService';
+import { ZawilPermit } from '../types/zawil';
 
 interface EmployeeState {
   companies: Company[];
@@ -8,6 +10,7 @@ interface EmployeeState {
   documents: OfficialDocuments[];
   emergencyContacts: EmergencyContact[];
   skillsExperiences: SkillsExperience[];
+  zawilPermits: ZawilPermit[];
 }
 
 type EmployeeAction =
@@ -25,6 +28,7 @@ type EmployeeAction =
   | { type: 'UPDATE_EMERGENCY_CONTACT'; payload: EmergencyContact }
   | { type: 'ADD_SKILLS_EXPERIENCE'; payload: SkillsExperience }
   | { type: 'UPDATE_SKILLS_EXPERIENCE'; payload: SkillsExperience }
+  | { type: 'SET_ZAWIL_PERMITS'; payload: ZawilPermit[] }
   | { type: 'LOAD_DATA'; payload: EmployeeState };
 
 const initialState: EmployeeState = {
@@ -34,6 +38,7 @@ const initialState: EmployeeState = {
   documents: [],
   emergencyContacts: [],
   skillsExperiences: [],
+  zawilPermits: [],
 };
 
 function employeeReducer(state: EmployeeState, action: EmployeeAction): EmployeeState {
@@ -94,6 +99,8 @@ function employeeReducer(state: EmployeeState, action: EmployeeAction): Employee
         ...state,
         skillsExperiences: state.skillsExperiences.map(se => se.employeeId === action.payload.employeeId ? action.payload : se)
       };
+    case 'SET_ZAWIL_PERMITS':
+      return { ...state, zawilPermits: action.payload };
     case 'LOAD_DATA':
       return action.payload;
     default:
@@ -104,6 +111,7 @@ function employeeReducer(state: EmployeeState, action: EmployeeAction): Employee
 interface EmployeeContextType {
   state: EmployeeState;
   dispatch: React.Dispatch<EmployeeAction>;
+  loadZawilData: () => Promise<void>;
 }
 
 const EmployeeContext = createContext<EmployeeContextType | undefined>(undefined);
@@ -116,14 +124,54 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (savedData) {
       dispatch({ type: 'LOAD_DATA', payload: JSON.parse(savedData) });
     }
+    
+    // Load Zawil data on mount
+    loadZawilData();
   }, []);
 
   useEffect(() => {
     localStorage.setItem('employeeDatabase', JSON.stringify(state));
   }, [state]);
 
+  // Load Zawil permits data
+  const loadZawilData = async () => {
+    try {
+      const permits = await ZawilService.getZawilPermits();
+      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits });
+    } catch (error) {
+      console.error('Error loading Zawil data:', error);
+    }
+  };
+
+  // Listen for Zawil data updates
+  useEffect(() => {
+    const handleZawilUpdate = () => {
+      loadZawilData();
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'zawil_data_updated') {
+        loadZawilData();
+        localStorage.removeItem('zawil_data_updated');
+      }
+    };
+
+    const handleCustomEvent = (e: CustomEvent) => {
+      if (e.detail === 'zawil_data_updated') {
+        loadZawilData();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('zawil_data_updated' as any, handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('zawil_data_updated' as any, handleCustomEvent);
+    };
+  }, []);
   return (
-    <EmployeeContext.Provider value={{ state, dispatch }}>
+    <EmployeeContext.Provider value={{ state, dispatch, loadZawilData }}>
       {children}
     </EmployeeContext.Provider>
   );

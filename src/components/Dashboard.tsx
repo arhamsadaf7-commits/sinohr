@@ -7,6 +7,7 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
 
   const totalEmployees = state.employees.length;
   const totalCompanies = state.companies.length;
+  const totalZawilPermits = state.zawilPermits.length;
   
   // Calculate expiring documents (within 30 days)
   const expiringDocuments = state.documents.filter(doc => {
@@ -16,6 +17,13 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
     return expiryDate <= thirtyDaysFromNow && expiryDate >= new Date();
   }).length;
 
+  // Calculate expiring Zawil permits (within 30 days)
+  const expiringZawilPermits = state.zawilPermits.filter(permit => {
+    const expiryDate = new Date(permit.expiry_date);
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    return expiryDate <= thirtyDaysFromNow && expiryDate >= new Date();
+  }).length;
   // Recent additions (last 7 days)
   const recentEmployees = state.employees.filter(emp => {
     const jobInfo = state.jobInfos.find(j => j.employeeId === emp.id);
@@ -49,18 +57,18 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
       change: 'Active branches'
     },
     {
-      title: 'Expiring Documents',
+      title: 'Zawil Permits',
+      value: totalZawilPermits,
+      icon: FileText,
+      color: 'purple',
+      change: `${expiringZawilPermits} expiring soon`
+    },
+    {
+      title: 'Other Documents',
       value: expiringDocuments,
       icon: AlertTriangle,
       color: 'amber',
       change: 'Next 30 days'
-    },
-    {
-      title: 'New Joiners',
-      value: recentEmployees,
-      icon: Calendar,
-      color: 'purple',
-      change: 'Last 30 days'
     }
   ];
 
@@ -72,6 +80,13 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
       return { ...emp, company, jobInfo };
     });
 
+  // Recent Zawil permits
+  const recentZawilPermits = state.zawilPermits
+    .slice(-5)
+    .map(permit => ({
+      ...permit,
+      daysUntilExpiry: Math.ceil((new Date(permit.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    }));
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -153,6 +168,39 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
             })}
           </div>
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Recent Zawil Permits */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Zawil Permits</h2>
+            <div className="space-y-3">
+              {recentZawilPermits.length > 0 ? (
+                recentZawilPermits.map((permit) => (
+                  <div key={permit.permit_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900">{permit.english_name}</p>
+                      <p className="text-sm text-gray-600">{permit.permit_type}</p>
+                      <p className="text-xs text-gray-500">{permit.zawil_permit_id}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">Expires: {new Date(permit.expiry_date).toLocaleDateString()}</p>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        permit.daysUntilExpiry < 0 ? 'bg-red-100 text-red-800' :
+                        permit.daysUntilExpiry <= 30 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {permit.daysUntilExpiry < 0 ? 'Expired' : 
+                         permit.daysUntilExpiry <= 30 ? 'Expiring Soon' : 'Valid'}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-center py-4">No Zawil permits uploaded yet</p>
+              )}
+            </div>
+          </div>
+
           {/* Recent Employees */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Employees</h2>
@@ -175,6 +223,7 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
               )}
             </div>
           </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Quick Actions */}
@@ -187,6 +236,13 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
               >
                 <div className="font-medium text-purple-900">Search Employees</div>
                 <div className="text-sm text-purple-700">Find and generate CV documents</div>
+              </button>
+              <button 
+                onClick={() => setActivePage?.('zawil-excel-uploader')}
+                className="w-full p-4 text-left bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+              >
+                <div className="font-medium text-indigo-900">Upload Zawil Data</div>
+                <div className="text-sm text-indigo-700">Import Zawil permits from Excel</div>
               </button>
               <button 
                 onClick={() => setActivePage('employees')}
@@ -208,13 +264,6 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
               >
                 <div className="font-medium text-amber-900">Export Data</div>
                 <div className="text-sm text-amber-700">Download employee database</div>
-              </button>
-              <button 
-                onClick={() => setActivePage('excel')}
-                className="w-full p-4 text-left bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200"
-              >
-                <div className="font-medium text-purple-900">Excel View</div>
-                <div className="text-sm text-purple-700">Spreadsheet interface</div>
               </button>
             </div>
           </div>
