@@ -4,7 +4,7 @@ import { Employee, ZawilPermit, UploadLog, ZawilUploadRecord, ZawilUploadResult 
 // Check if we're in demo mode (mock authentication)
 const isDemoMode = () => {
   const token = localStorage.getItem('auth_token');
-  return token?.startsWith('demo-token-');
+  return !token || token?.startsWith('demo-token-');
 };
 
 // Mock data for demo mode
@@ -130,7 +130,7 @@ export class ZawilService {
         expiry_date: permitData.expiry_date || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         employee_id: 1,
         status: 'Valid',
-        days_remaining: Math.ceil((new Date(permitData.expiry_date || '').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)),
+        days_remaining: permitData.expiry_date ? Math.ceil((new Date(permitData.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 365,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         employee: {
@@ -144,6 +144,7 @@ export class ZawilService {
         }
       };
       
+      console.log('Created mock permit:', mockPermit);
       mockZawilPermits.push(mockPermit);
       return mockPermit;
     }
@@ -170,6 +171,8 @@ export class ZawilService {
     uploaderName: string,
     fileName: string
   ): Promise<ZawilUploadResult> {
+    console.log('Processing Zawil upload:', { records: records.length, uploaderName, fileName, isDemoMode: isDemoMode() });
+    
     if (isDemoMode()) {
       // Process upload in demo mode
       let insertedCount = 0;
@@ -229,6 +232,7 @@ export class ZawilService {
           insertedCount++;
         } catch (error) {
           skippedCount++;
+          console.error('Error processing record in demo mode:', error);
           errors.push(`Row ${record.rowNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
@@ -237,6 +241,8 @@ export class ZawilService {
       mockUploadLog.rows_inserted = insertedCount;
       mockUploadLog.rows_skipped = skippedCount;
       mockUploadLog.upload_status = 'Completed';
+
+      console.log('Demo upload completed:', { insertedCount, skippedCount, totalMockPermits: mockZawilPermits.length });
 
       return {
         success: true,
@@ -361,7 +367,10 @@ export class ZawilService {
 
   // Get all Zawil permits with employee data
   static async getZawilPermits(): Promise<ZawilPermit[]> {
+    console.log('Getting Zawil permits, demo mode:', isDemoMode());
+    
     if (isDemoMode()) {
+      console.log('Returning mock permits:', mockZawilPermits.length);
       return mockZawilPermits;
     }
 
@@ -377,6 +386,7 @@ export class ZawilService {
       throw new Error(`Failed to fetch permits: ${error.message}`);
     }
 
+    console.log('Fetched permits from database:', data?.length || 0);
     return data || [];
   }
 

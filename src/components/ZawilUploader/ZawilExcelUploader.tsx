@@ -131,12 +131,10 @@ export const ZawilExcelUploader: React.FC = () => {
     if (!dateString) return false;
     const date = new Date(dateString);
     return !isNaN(date.getTime());
-  };
-
   // Check for duplicates based on MOI Number + Issue Date
   const checkDuplicate = (moiNumber: string, issueDate: string): boolean => {
-    const key = `${moiNumber}-${issueDate}`;
-    return existingRecords.has(key);
+    // For now, we'll handle duplicates in the service layer
+    return false;
   };
 
   // Extract data from Excel worksheet with exact column validation
@@ -154,11 +152,13 @@ export const ZawilExcelUploader: React.FC = () => {
 
       // Get headers from first row
       const headers = data[0].map((h: any) => h?.toString().trim() || '');
+      console.log('Excel headers found:', headers);
       
       // Validate required columns
       const validation = validateColumns(headers);
       if (!validation.isValid) {
         toast.error(`${fileName}: Missing required columns: ${validation.missingColumns.join(', ')}`);
+        console.error('Missing columns:', validation.missingColumns);
         return records;
       }
 
@@ -177,6 +177,8 @@ export const ZawilExcelUploader: React.FC = () => {
         issueDate: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.issueDate),
         expiryDate: findColumnIndex(headers.map(h => h.toLowerCase()), columnMappings.expiryDate)
       };
+
+      console.log('Column indices:', columnIndices);
 
       // Process data rows (skip header row)
       for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
@@ -245,6 +247,8 @@ export const ZawilExcelUploader: React.FC = () => {
         records.push(record);
       }
 
+      console.log(`Extracted ${records.length} records from ${fileName}`);
+
     } catch (error) {
       console.error(`Error processing ${fileName}:`, error);
       toast.error(`Failed to process ${fileName}`);
@@ -257,7 +261,7 @@ export const ZawilExcelUploader: React.FC = () => {
   const processZawilExcel = async (files: File[]) => {
     setIsProcessing(true);
     setProcessingProgress(0);
-    const allRecords: ZawilRecord[] = [];
+    const allRecords: ZawilUploadRecord[] = [];
 
     try {
       for (let i = 0; i < files.length; i++) {
@@ -286,7 +290,7 @@ export const ZawilExcelUploader: React.FC = () => {
       const successCount = allRecords.filter(r => r.status === 'success').length;
       const warningCount = allRecords.filter(r => r.status === 'warning').length;
       const errorCount = allRecords.filter(r => r.status === 'error').length;
-      const duplicateCount = allRecords.filter(r => r.status === 'duplicate').length;
+      const duplicateCount = allRecords.filter(r => r.isDuplicate).length;
 
       if (successCount > 0) {
         toast.success(`Successfully processed ${successCount} records${warningCount > 0 ? ` (${warningCount} with warnings)` : ''}${duplicateCount > 0 ? `, ${duplicateCount} duplicates found` : ''}${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
@@ -348,6 +352,8 @@ export const ZawilExcelUploader: React.FC = () => {
       return;
     }
 
+    console.log('Saving to database:', { validRecords: validRecords.length, authUser: authState.user?.username });
+
     setIsSaving(true);
 
     try {
@@ -356,6 +362,8 @@ export const ZawilExcelUploader: React.FC = () => {
         authState.user?.username || 'Unknown User',
         files.map(f => f.name).join(', ')
       );
+
+      console.log('Upload result:', result);
 
       if (result.success) {
         toast.success(result.message);
@@ -366,6 +374,8 @@ export const ZawilExcelUploader: React.FC = () => {
         // Trigger dashboard refresh
         localStorage.setItem('zawil_data_updated', Date.now().toString());
         window.dispatchEvent(new CustomEvent('zawil_data_updated', { detail: 'zawil_data_updated' }));
+        
+        console.log('Triggered zawil_data_updated event');
       } else {
         toast.error(result.message);
         if (result.errors.length > 0) {

@@ -136,7 +136,9 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Load Zawil permits data
   const loadZawilData = async () => {
     try {
+      console.log('EmployeeContext: Loading Zawil data');
       const permits = await ZawilService.getZawilPermits();
+      console.log('EmployeeContext: Loaded Zawil permits', permits.length);
       dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits });
     } catch (error) {
       console.error('Error loading Zawil data:', error);

@@ -57,6 +57,7 @@ export const ExpiryDashboard: React.FC = () => {
 
   // Load data on component mount
   useEffect(() => {
+    console.log('ExpiryDashboard: Loading data on mount');
     loadData();
   }, [refreshTrigger]);
 
@@ -87,10 +88,12 @@ export const ExpiryDashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      console.log('ExpiryDashboard: Loading Zawil permits and upload history');
       const [permits, history] = await Promise.all([
         ZawilService.getZawilPermits(),
         ZawilService.getUploadHistory()
       ]);
+      console.log('ExpiryDashboard: Loaded data', { permits: permits.length, history: history.length });
       setZawilPermits(permits);
       setUploadHistory(history);
     } catch (error) {
