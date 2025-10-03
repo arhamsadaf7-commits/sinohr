@@ -60,10 +60,16 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
 
           // Column mapping
           const columnMap = {
-            employeeId: headers.findIndex(h => h.includes('employee') && h.includes('id')),
-            employeeName: headers.findIndex(h => h.includes('employee') && h.includes('name')),
+            zawilPermitId: headers.findIndex(h => h.includes('zawil') && h.includes('permit') && h.includes('id')),
             permitType: headers.findIndex(h => h.includes('permit') && h.includes('type')),
-            permitNumber: headers.findIndex(h => h.includes('permit') && h.includes('number')),
+            issuedFor: headers.findIndex(h => h.includes('issued') && h.includes('for')),
+            arabicName: headers.findIndex(h => h.includes('arabic') && h.includes('name')),
+            englishName: headers.findIndex(h => h.includes('english') && h.includes('name')),
+            moiNumber: headers.findIndex(h => h.includes('moi') && h.includes('number')),
+            passportNumber: headers.findIndex(h => h.includes('passport') && h.includes('number')),
+            nationality: headers.findIndex(h => h.includes('nationality')),
+            plateNumber: headers.findIndex(h => h.includes('plate') && h.includes('number')),
+            portName: headers.findIndex(h => h.includes('port') && h.includes('name')),
             issueDate: headers.findIndex(h => h.includes('issue') && h.includes('date')),
             expiryDate: headers.findIndex(h => h.includes('expiry') && h.includes('date')),
             status: headers.findIndex(h => h.includes('status'))
@@ -80,17 +86,43 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
             try {
               const record: ZawilUploadRecord = {
                 id: `zawil_${Date.now()}_${i}`,
-                employeeId: columnMap.employeeId >= 0 ? String(row[columnMap.employeeId] || '') : '',
-                employeeName: columnMap.employeeName >= 0 ? String(row[columnMap.employeeName] || '') : '',
+                zawilPermitId: columnMap.zawilPermitId >= 0 ? String(row[columnMap.zawilPermitId] || '') : '',
                 permitType: columnMap.permitType >= 0 ? String(row[columnMap.permitType] || '') : '',
-                permitNumber: columnMap.permitNumber >= 0 ? String(row[columnMap.permitNumber] || '') : '',
+                issuedFor: columnMap.issuedFor >= 0 ? String(row[columnMap.issuedFor] || '') : '',
+                arabicName: columnMap.arabicName >= 0 ? String(row[columnMap.arabicName] || '') : '',
+                englishName: columnMap.englishName >= 0 ? String(row[columnMap.englishName] || '') : '',
+                moiNumber: columnMap.moiNumber >= 0 ? String(row[columnMap.moiNumber] || '') : '',
+                passportNumber: columnMap.passportNumber >= 0 ? String(row[columnMap.passportNumber] || '') : '',
+                nationality: columnMap.nationality >= 0 ? String(row[columnMap.nationality] || '') : '',
+                plateNumber: columnMap.plateNumber >= 0 ? String(row[columnMap.plateNumber] || '') : '',
+                portName: columnMap.portName >= 0 ? String(row[columnMap.portName] || '') : '',
                 issueDate: columnMap.issueDate >= 0 ? String(row[columnMap.issueDate] || '') : '',
                 expiryDate: columnMap.expiryDate >= 0 ? String(row[columnMap.expiryDate] || '') : '',
                 status: columnMap.status >= 0 ? String(row[columnMap.status] || 'Active') : 'Active',
-                uploadedAt: new Date().toISOString()
+                fileName: file.name,
+                rowNumber: i,
+                uploadedAt: new Date().toISOString(),
+                errors: []
               };
 
-              if (record.employeeId && record.employeeName) {
+              // Validate required fields
+              const errors: string[] = [];
+              if (!record.zawilPermitId) errors.push('Zawil Permit ID is required');
+              if (!record.englishName) errors.push('English Name is required');
+              if (!record.moiNumber) errors.push('MOI Number is required');
+              if (!record.issueDate) errors.push('Issue Date is required');
+              if (!record.expiryDate) errors.push('Expiry Date is required');
+              if (!record.permitType) errors.push('Permit Type is required');
+              if (!record.issuedFor) errors.push('Issued For is required');
+              if (!record.portName) errors.push('Port Name is required');
+
+              if (errors.length > 0) {
+                record.status = 'error';
+                record.errors = errors;
+              }
+
+              // Include all records (valid and invalid)
+              if (record.zawilPermitId || record.englishName) {
                 records.push(record);
               }
             } catch (error) {
@@ -134,9 +166,9 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
       
       console.log('📊 Upload result:', result);
       
-      setUploadedCount(result.successCount);
+      setUploadedCount(result.insertedCount);
       setUploadStatus('success');
-      setUploadMessage(`Successfully uploaded ${result.successCount} Zawil permits`);
+      setUploadMessage(`Successfully uploaded ${result.insertedCount} Zawil permits`);
 
       // Trigger refresh events
       window.dispatchEvent(new CustomEvent('zawil_data_updated'));
@@ -269,12 +301,18 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
         <div className="mt-6 p-4 bg-gray-50 rounded-lg">
           <h3 className="font-medium text-gray-900 mb-2">Excel File Format:</h3>
           <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Employee ID (required)</li>
-            <li>• Employee Name (required)</li>
-            <li>• Permit Type</li>
-            <li>• Permit Number</li>
-            <li>• Issue Date</li>
-            <li>• Expiry Date</li>
+            <li>• Zawil Permit ID (required)</li>
+            <li>• Permit Type (required)</li>
+            <li>• Issued For (required)</li>
+            <li>• Arabic Name</li>
+            <li>• English Name (required)</li>
+            <li>• MOI Number (required)</li>
+            <li>• Passport Number</li>
+            <li>• Nationality</li>
+            <li>• Plate Number</li>
+            <li>• Port Name (required)</li>
+            <li>• Issue Date (required)</li>
+            <li>• Expiry Date (required)</li>
             <li>• Status</li>
           </ul>
         </div>
