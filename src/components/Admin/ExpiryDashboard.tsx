@@ -57,7 +57,6 @@ export const ExpiryDashboard: React.FC = () => {
 
   // Load data on component mount
   useEffect(() => {
-    console.log('🏗️ ExpiryDashboard: Loading data on mount');
     loadData();
   }, [refreshTrigger]);
 
@@ -65,7 +64,6 @@ export const ExpiryDashboard: React.FC = () => {
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'zawil_data_updated') {
-        console.log('📢 Storage event: zawil_data_updated detected');
         setRefreshTrigger(prev => prev + 1);
         localStorage.removeItem('zawil_data_updated');
       }
@@ -73,7 +71,6 @@ export const ExpiryDashboard: React.FC = () => {
 
     const handleCustomEvent = (e: CustomEvent) => {
       if (e.detail === 'zawil_data_updated') {
-        console.log('📢 Custom event: zawil_data_updated detected');
         setRefreshTrigger(prev => prev + 1);
       }
     };
@@ -90,20 +87,13 @@ export const ExpiryDashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      console.log('🔄 ExpiryDashboard: Loading Zawil permits and upload history');
       const [permits, history] = await Promise.all([
         ZawilService.getZawilPermits(),
         ZawilService.getUploadHistory()
       ]);
-      console.log('✅ ExpiryDashboard: Loaded data', { 
-        permits: permits.length, 
-        history: history.length,
-        permitDetails: permits.map(p => ({ id: p.permit_id, name: p.english_name, status: p.status }))
-      });
       setZawilPermits(permits);
       setUploadHistory(history);
     } catch (error) {
-      console.error('Error loading data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);

@@ -150,7 +150,6 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
     setUploadMessage('Processing file...');
 
     try {
-      console.log('🚀 Starting Zawil upload process');
       
       // Process Excel file
       const records = await processExcelFile(file);
@@ -162,20 +161,18 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
       setUploadMessage(`Processing ${records.length} records...`);
 
       // Upload to service
-      const result = await ZawilService.processZawilUpload(records);
+      const result = await ZawilService.processZawilUpload(records, 'Excel Upload', file.name);
       
-      console.log('📊 ZawilExcelUploader: Upload result:', result);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
       
       setUploadedCount(result.insertedCount);
       setUploadStatus('success');
       setUploadMessage(`Successfully uploaded ${result.insertedCount} Zawil permits`);
 
       // Trigger refresh events
-      console.log('📢 ZawilExcelUploader: Triggering refresh events');
-      window.dispatchEvent(new CustomEvent('zawil_data_updated'));
       localStorage.setItem('zawil_data_updated', Date.now().toString());
-      
-      // Additional event for EmployeeContext
       window.dispatchEvent(new CustomEvent('zawil_data_updated', { detail: 'zawil_data_updated' }));
 
       // Reset form
@@ -186,11 +183,8 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
 
       // Callback
       onUploadComplete?.();
-      
-      console.log('✅ ZawilExcelUploader: Upload process completed successfully');
 
     } catch (error) {
-      console.error('❌ Upload failed:', error);
       setUploadStatus('error');
       setUploadMessage(error instanceof Error ? error.message : 'Upload failed');
     } finally {
