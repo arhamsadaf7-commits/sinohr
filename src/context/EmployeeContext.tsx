@@ -136,9 +136,12 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Load Zawil permits data
   const loadZawilData = async () => {
     try {
-      console.log('EmployeeContext: Loading Zawil data');
+      console.log('🔄 EmployeeContext: Loading Zawil data');
       const permits = await ZawilService.getZawilPermits();
-      console.log('EmployeeContext: Loaded Zawil permits', permits.length);
+      console.log('✅ EmployeeContext: Loaded Zawil permits', {
+        count: permits.length,
+        permits: permits.map(p => ({ id: p.permit_id, name: p.english_name, status: p.status }))
+      });
       dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits });
     } catch (error) {
       console.error('Error loading Zawil data:', error);
@@ -148,11 +151,13 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Listen for Zawil data updates
   useEffect(() => {
     const handleZawilUpdate = () => {
+      console.log('📢 EmployeeContext: Zawil update event received');
       loadZawilData();
     };
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'zawil_data_updated') {
+        console.log('📢 EmployeeContext: Storage change event received');
         loadZawilData();
         localStorage.removeItem('zawil_data_updated');
       }
@@ -160,6 +165,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const handleCustomEvent = (e: CustomEvent) => {
       if (e.detail === 'zawil_data_updated') {
+        console.log('📢 EmployeeContext: Custom event received');
         loadZawilData();
       }
     };

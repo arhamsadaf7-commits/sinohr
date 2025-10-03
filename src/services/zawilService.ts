@@ -171,7 +171,12 @@ export class ZawilService {
     uploaderName: string,
     fileName: string
   ): Promise<ZawilUploadResult> {
-    console.log('Processing Zawil upload:', { records: records.length, uploaderName, fileName, isDemoMode: isDemoMode() });
+    console.log('🚀 ZawilService.processZawilUpload called:', { 
+      recordsCount: records.length, 
+      uploaderName, 
+      fileName, 
+      isDemoMode: isDemoMode() 
+    });
     
     if (isDemoMode()) {
       // Process upload in demo mode
@@ -191,12 +196,14 @@ export class ZawilService {
         upload_status: 'Processing'
       };
       mockUploadHistory.push(mockUploadLog);
+      console.log('📝 Created mock upload log:', mockUploadLog);
 
       // Process each valid record
       for (const record of records) {
         if (record.status === 'error') {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${record.errors.join(', ')}`);
+          console.log('❌ Skipping error record:', record.rowNumber, record.errors);
           continue;
         }
 
@@ -209,11 +216,12 @@ export class ZawilService {
           if (isDuplicate) {
             skippedCount++;
             errors.push(`Row ${record.rowNumber}: Duplicate permit (MOI: ${record.moiNumber}, Issue Date: ${record.issueDate})`);
+            console.log('⚠️ Skipping duplicate record:', record.rowNumber);
             continue;
           }
 
           // Create mock permit
-          await this.insertZawilPermit({
+          const newPermit = await this.insertZawilPermit({
             zawil_permit_id: record.zawilPermitId,
             permit_type: record.permitType,
             issued_for: record.issuedFor,
@@ -229,6 +237,7 @@ export class ZawilService {
             employee_id: 1
           });
 
+          console.log('✅ Inserted permit:', newPermit.permit_id, newPermit.english_name);
           insertedCount++;
         } catch (error) {
           skippedCount++;
@@ -242,7 +251,12 @@ export class ZawilService {
       mockUploadLog.rows_skipped = skippedCount;
       mockUploadLog.upload_status = 'Completed';
 
-      console.log('Demo upload completed:', { insertedCount, skippedCount, totalMockPermits: mockZawilPermits.length });
+      console.log('🎉 Demo upload completed:', { 
+        insertedCount, 
+        skippedCount, 
+        totalMockPermits: mockZawilPermits.length,
+        mockPermits: mockZawilPermits.map(p => ({ id: p.permit_id, name: p.english_name }))
+      });
 
       return {
         success: true,
@@ -367,10 +381,18 @@ export class ZawilService {
 
   // Get all Zawil permits with employee data
   static async getZawilPermits(): Promise<ZawilPermit[]> {
-    console.log('Getting Zawil permits, demo mode:', isDemoMode());
+    console.log('🔍 ZawilService.getZawilPermits called, demo mode:', isDemoMode());
     
     if (isDemoMode()) {
-      console.log('Returning mock permits:', mockZawilPermits.length);
+      console.log('📋 Returning mock permits:', {
+        count: mockZawilPermits.length,
+        permits: mockZawilPermits.map(p => ({ 
+          id: p.permit_id, 
+          name: p.english_name, 
+          status: p.status,
+          expiry: p.expiry_date 
+        }))
+      });
       return mockZawilPermits;
     }
 
@@ -386,7 +408,7 @@ export class ZawilService {
       throw new Error(`Failed to fetch permits: ${error.message}`);
     }
 
-    console.log('Fetched permits from database:', data?.length || 0);
+    console.log('📊 Fetched permits from database:', data?.length || 0);
     return data || [];
   }
 
