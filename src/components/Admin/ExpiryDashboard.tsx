@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ZawilService } from '../../services/zawilService';
 import { ZawilPermit, UploadLog } from '../../types/zawil';
-import { Calendar, AlertTriangle, Clock, CheckCircle, Search, Filter, ChevronDown, ChevronUp, FileText, CreditCard, Shield, Car, Eye, CreditCard as Edit, Check, Download, X, User, Phone, Mail, Building, MapPin, Archive, Loader2 } from 'lucide-react';
+import { Calendar, AlertTriangle, Clock, CheckCircle, Search, Filter, ChevronDown, ChevronUp, FileText, CreditCard, Shield, Car, Eye, CreditCard as Edit, Check, Download, X, User, Phone, Mail, Building, MapPin, Archive, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ExpiryItem, ExpiryStats } from '../../types/auth';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -50,9 +50,20 @@ export const ExpiryDashboard: React.FC = () => {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<'mark-done' | 'export' | null>(null);
   const [documentHistory, setDocumentHistory] = useState<DocumentHistory[]>([]);
-  const [completedItems, setCompletedItems] = useState<Set<string>>(new Set());
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [filters, setFilters] = useState({
+    search: '',
+    status: '',
+    permitType: '',
+    issueDateFrom: '',
+    issueDateTo: '',
+    expiryDateFrom: '',
+    expiryDateTo: ''
+  });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0
+  });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Load data on component mount
@@ -87,11 +98,50 @@ export const ExpiryDashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [permits, history] = await Promise.all([
-        ZawilService.getZawilPermits(),
+      
+      // Get filtered and paginated permits
+      const { permits, total } = await ZawilService.getZawilPermits({
+        search: filters.search,
+        status: filters.status,
+        permitType: filters.permitType,
+        issueDateFrom: filters.issueDateFrom,
+        issueDateTo: filters.issueDateTo,
+        expiryDateFrom: filters.expiryDateFrom,
+        expiryDateTo: filters.expiryDateTo,
+        page: pagination.page,
+        limit: pagination.limit
+      });
+      
+      const history = await ZawilService.getUploadHistory();
+      
+      setZawilPermits(permits);
+      setUploadHistory(history);
+      setPagination(prev => ({ ...prev, total }));
+    } catch (error) {
+      toast.error('Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load data when filters or pagination change
+  useEffect(() => {
+    loadData();
+  }, [filters, pagination.page, pagination.limit]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, page: 1 }));
+  }, [filters.search, filters.status, filters.permitType, filters.issueDateFrom, filters.issueDateTo, filters.expiryDateFrom, filters.expiryDateTo]);
+
+  // Load initial data
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const [history] = await Promise.all([
         ZawilService.getUploadHistory()
       ]);
-      setZawilPermits(permits);
       setUploadHistory(history);
     } catch (error) {
       toast.error('Failed to load data');
@@ -99,6 +149,9 @@ export const ExpiryDashboard: React.FC = () => {
       setLoading(false);
     }
   };
+  
+  loadInitialData();
+}, [refreshTrigger]);
 
   // Enhanced expiry calculation with more granular status
   const calculateExpiryStatus = (expiryDate: string): ExpiryItem['status'] => {
@@ -116,7 +169,6 @@ export const ExpiryDashboard: React.FC = () => {
   // Calculate dashboard data from employee context
   const dashboardData = useMemo(() => {
     const today = new Date();
-    const thirtyDaysFromNow = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     // Convert Zawil permits to dashboard format
     const zawilItems = zawilPermits.map(permit => ({
@@ -159,29 +211,11 @@ export const ExpiryDashboard: React.FC = () => {
     };
   }, [zawilPermits]);
 
-  // Filter items based on search, status, and date filters
-  const getFilteredItems = (items: ExtendedExpiryItem[]) => {
-    return items.filter(item => {
-      const matchesSearch = !searchTerm || 
-        item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.documentNumber.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = filterStatus === 'all' || 
-        (filterStatus === 'done' && item.isDone) ||
-        (filterStatus !== 'done' && !item.isDone && item.status === filterStatus);
-      
-      const matchesDateFrom = !dateFilter.from || item.expiryDate >= dateFilter.from;
-      const matchesDateTo = !dateFilter.to || item.expiryDate <= dateFilter.to;
-      
-      return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
-    });
-  };
-
   // Get current tab data
   const getCurrentTabData = () => {
     if (activeTab === 'overview') return [];
     const tabData = dashboardData[activeTab as keyof typeof dashboardData];
-    return getFilteredItems(tabData?.items || []);
+    return tabData?.items || [];
   };
 
   // Handle mark as done
@@ -192,6 +226,21 @@ export const ExpiryDashboard: React.FC = () => {
       loadData(); // Reload data
     } catch (error) {
       toast.error('Failed to mark as done');
+    }
+  };
+
+  // Handle mark as undone
+  const handleMarkAsUndone = async (item: ZawilPermit) => {
+    try {
+      // Determine new status based on expiry date
+      const daysRemaining = Math.ceil((new Date(item.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+      const newStatus = daysRemaining < 0 ? 'Expired' : daysRemaining <= 30 ? 'Expiring Soon' : 'Valid';
+      
+      await ZawilService.updatePermitStatus(item.permit_id, newStatus);
+      toast.success(`Marked ${item.english_name}'s permit as ${newStatus.toLowerCase()}`);
+      loadData(); // Reload data
+    } catch (error) {
+      toast.error('Failed to mark as undone');
     }
   };
 
@@ -211,15 +260,14 @@ export const ExpiryDashboard: React.FC = () => {
 
   // Handle export
   const handleExport = () => {
-    const currentData = getCurrentTabData();
-    
     if (activeTab === 'zawil') {
-      const permits = zawilPermits.filter(permit => 
-        selectedItems.size === 0 || selectedItems.has(permit.permit_id.toString())
-      );
+      const permits = selectedItems.size > 0 
+        ? zawilPermits.filter(permit => selectedItems.has(permit.permit_id.toString()))
+        : zawilPermits;
       ZawilService.exportToCSV(permits);
     } else {
       // Handle other document types
+      const currentData = getCurrentTabData();
       const csvContent = [
         ['Employee Name', 'Document Type', 'Document Number', 'Expiry Date', 'Days Remaining', 'Status'].join(','),
         ...currentData.map(item => [
@@ -244,6 +292,33 @@ export const ExpiryDashboard: React.FC = () => {
     toast.success('Data exported successfully');
     setSelectedItems(new Set());
     setBulkAction(null);
+  };
+
+  // Handle filter changes
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Handle pagination
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      status: '',
+      permitType: '',
+      issueDateFrom: '',
+      issueDateTo: '',
+      expiryDateFrom: '',
+      expiryDateTo: ''
+    });
   };
 
   // Get status styling
@@ -457,37 +532,97 @@ export const ExpiryDashboard: React.FC = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search by employee name or document number..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by employee name, MOI number, or permit number..."
+                value={filters.search}
+                onChange={(e) => handleFilterChange('search', e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            
+            <div className="flex gap-2">
+              <select
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">All Status</option>
+                <option value="Expired">Expired</option>
+                <option value="Expiring Soon">Expiring Soon</option>
+                <option value="Valid">Active</option>
+                <option value="Done">Done</option>
+              </select>
+              
+              <input
+                type="text"
+                placeholder="Permit Type"
+                value={filters.permitType}
+                onChange={(e) => handleFilterChange('permitType', e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Advanced Filters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Issue Date From</label>
+              <input
+                type="date"
+                value={filters.issueDateFrom}
+                onChange={(e) => handleFilterChange('issueDateFrom', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Issue Date To</label>
+              <input
+                type="date"
+                value={filters.issueDateTo}
+                onChange={(e) => handleFilterChange('issueDateTo', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Expiry Date From</label>
+              <input
+                type="date"
+                value={filters.expiryDateFrom}
+                onChange={(e) => handleFilterChange('expiryDateFrom', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Expiry Date To</label>
+              <input
+                type="date"
+                value={filters.expiryDateTo}
+                onChange={(e) => handleFilterChange('expiryDateTo', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Filter Actions */}
+          <div className="flex justify-between items-center mt-4">
+            <button
+              onClick={clearFilters}
+              className="text-sm text-gray-600 hover:text-gray-800"
             >
-              <option value="all">All Status</option>
-              <option value="expired">Expired</option>
-              <option value="expiring-soon">Expiring Soon</option>
-              <option value="valid">Valid</option>
-              <option value="done">Completed</option>
-            </select>
-            <input
-              type="date"
-              value={dateFilter.from}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="From Date"
-            />
-            <input
-              type="date"
-              value={dateFilter.to}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="To Date"
-            />
+              Clear All Filters
+            </button>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Records per page:</span>
+              <select
+                value={pagination.limit}
+                onChange={(e) => handleLimitChange(Number(e.target.value))}
+                className="px-2 py-1 border border-gray-300 rounded text-sm"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
 
           {/* Bulk Actions */}
@@ -520,7 +655,7 @@ export const ExpiryDashboard: React.FC = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center">
             <h3 className="font-semibold text-gray-900">
-              {filteredItems.length} {tabId} documents
+              {pagination.total} {tabId} documents (showing {zawilPermits.length})
             </h3>
             <button
               onClick={handleExport}
@@ -538,10 +673,10 @@ export const ExpiryDashboard: React.FC = () => {
                   <th className="px-4 py-3 text-left">
                     <input
                       type="checkbox"
-                     checked={filteredItems.length > 0 && selectedItems.size === filteredItems.length}
+                      checked={zawilPermits.length > 0 && selectedItems.size === zawilPermits.length}
                       onChange={(e) => {
                         if (e.target.checked) {
-                         setSelectedItems(new Set(filteredItems.map(item => item.id)));
+                          setSelectedItems(new Set(zawilPermits.map(permit => permit.permit_id.toString())));
                         } else {
                           setSelectedItems(new Set());
                         }
@@ -578,18 +713,18 @@ export const ExpiryDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {getCurrentTabData().map((item) => (
-                  <tr key={item.id} className={`border-b border-gray-100 hover:bg-gray-50 ${getStatusStyling(item.status, item.isDone)}`}>
+                {zawilPermits.map((permit) => (
+                  <tr key={permit.permit_id} className={`border-b border-gray-100 hover:bg-gray-50`}>
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
-                        checked={selectedItems.has(item.id)}
+                        checked={selectedItems.has(permit.permit_id.toString())}
                         onChange={(e) => {
                           const newSelected = new Set(selectedItems);
                           if (e.target.checked) {
-                            newSelected.add(item.id);
+                            newSelected.add(permit.permit_id.toString());
                           } else {
-                            newSelected.delete(item.id);
+                            newSelected.delete(permit.permit_id.toString());
                           }
                           setSelectedItems(newSelected);
                         }}
@@ -598,74 +733,59 @@ export const ExpiryDashboard: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {getStatusIcon(item.status, item.isDone)}
+                        {getStatusIcon(permit.status.toLowerCase().replace(' ', '-'))}
                         <span className="text-xs font-medium capitalize">
-                          {item.isDone ? 'Done' : item.status.replace('-', ' ')}
+                          {permit.status}
                         </span>
                       </div>
                     </td>
                     {activeTab === 'zawil' ? (
                       <>
-                        <td className="px-4 py-3 font-mono text-sm">{item.zawilPermitId}</td>
-                        <td className="px-4 py-3 text-sm">{item.permitType}</td>
-                        <td className="px-4 py-3 text-sm">{item.issuedFor}</td>
-                        <td className="px-4 py-3 text-sm">{item.arabicName}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{item.employeeName}</td>
-                        <td className="px-4 py-3 font-mono text-sm">{item.moiNumber}</td>
-                        <td className="px-4 py-3 font-mono text-sm">{item.passportNumber}</td>
-                        <td className="px-4 py-3 text-sm">{item.nationality}</td>
-                        <td className="px-4 py-3 text-sm">{item.plateNumber}</td>
-                        <td className="px-4 py-3 text-sm">{item.portName}</td>
-                        <td className="px-4 py-3 text-sm">{new Date(item.issueDate!).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 text-sm">{new Date(item.expiryDate).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{permit.zawil_permit_id}</td>
+                        <td className="px-4 py-3 text-sm">{permit.permit_type}</td>
+                        <td className="px-4 py-3 text-sm">{permit.issued_for}</td>
+                        <td className="px-4 py-3 text-sm">{permit.arabic_name}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{permit.english_name}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{permit.moi_number}</td>
+                        <td className="px-4 py-3 font-mono text-sm">{permit.passport_number}</td>
+                        <td className="px-4 py-3 text-sm">{permit.nationality}</td>
+                        <td className="px-4 py-3 text-sm">{permit.plate_number}</td>
+                        <td className="px-4 py-3 text-sm">{permit.port_name}</td>
+                        <td className="px-4 py-3 text-sm">{new Date(permit.issue_date).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-sm">{new Date(permit.expiry_date).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-sm">
                           <span className={`font-medium ${
-                            item.daysUntilExpiry < 0 ? 'text-red-600' :
-                            item.daysUntilExpiry <= 30 ? 'text-yellow-600' :
+                            permit.days_remaining < 0 ? 'text-red-600' :
+                            permit.days_remaining <= 30 ? 'text-yellow-600' :
                             'text-green-600'
                           }`}>
-                            {item.daysUntilExpiry} days
-                          </span>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-4 py-3 font-medium text-gray-900">{item.employeeName}</td>
-                        <td className="px-4 py-3 font-mono text-sm">{item.documentNumber}</td>
-                        <td className="px-4 py-3 text-sm">{new Date(item.expiryDate).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`font-medium ${
-                            item.daysUntilExpiry < 0 ? 'text-red-600' :
-                            item.daysUntilExpiry <= 30 ? 'text-yellow-600' :
-                            'text-green-600'
-                          }`}>
-                            {item.daysUntilExpiry} days
+                            {permit.days_remaining} days
                           </span>
                         </td>
                       </>
                     )}
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
+                        {permit.status === 'Done' ? (
+                          <button
+                            onClick={() => handleMarkAsUndone(permit)}
+                            className="p-1 text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                            title="Mark as Undone"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleMarkAsDone(permit)}
+                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Mark as Done"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => {
-                            if (activeTab === 'zawil') {
-                              const permit = zawilPermits.find(p => p.permit_id.toString() === item.id);
-                              if (permit) handleMarkAsDone(permit);
-                            }
-                          }}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
-                          title="Mark as Done"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (activeTab === 'zawil') {
-                              const permit = zawilPermits.find(p => p.permit_id.toString() === item.id);
-                              if (permit) {
-                                setSelectedItem(permit);
-                              }
-                            }
+                            setSelectedItem(permit);
                             setShowUpdateModal(true);
                           }}
                           className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -675,12 +795,7 @@ export const ExpiryDashboard: React.FC = () => {
                         </button>
                         <button
                           onClick={() => {
-                            if (activeTab === 'zawil') {
-                              const permit = zawilPermits.find(p => p.permit_id.toString() === item.id);
-                              if (permit) {
-                                setSelectedItem(permit);
-                              }
-                            }
+                            setSelectedItem(permit);
                             setShowDetailsModal(true);
                           }}
                           className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
@@ -696,7 +811,35 @@ export const ExpiryDashboard: React.FC = () => {
             </table>
           </div>
 
-          {getCurrentTabData().length === 0 && (
+          {/* Pagination */}
+          {pagination.total > pagination.limit && (
+            <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1}
+                  className="p-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-3 py-1 text-sm">
+                  Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
+                </span>
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page >= Math.ceil(pagination.total / pagination.limit)}
+                  className="p-2 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {zawilPermits.length === 0 && !loading && (
             <div className="text-center py-8">
               <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No documents found matching your criteria</p>

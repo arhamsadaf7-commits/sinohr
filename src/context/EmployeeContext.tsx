@@ -145,24 +145,15 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Listen for Zawil data updates
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'zawil_data_updated') {
-        loadZawilData();
-        localStorage.removeItem('zawil_data_updated');
-      }
-    };
-
     const handleCustomEvent = (e: CustomEvent) => {
       if (e.detail === 'zawil_data_updated') {
         loadZawilData();
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
     window.addEventListener('zawil_data_updated' as any, handleCustomEvent);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('zawil_data_updated' as any, handleCustomEvent);
     };
   }, []);

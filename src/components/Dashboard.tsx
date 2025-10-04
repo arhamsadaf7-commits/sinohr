@@ -8,6 +8,10 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
   const totalEmployees = state.employees.length;
   const totalCompanies = state.companies.length;
   const totalZawilPermits = state.zawilPermits.length;
+
+  // Debug: Log employee data
+  console.log('Dashboard - Total employees:', totalEmployees);
+  console.log('Dashboard - Employee data:', state.employees);
   
   // Calculate expiring documents (within 30 days)
   const expiringDocuments = state.documents.filter(doc => {

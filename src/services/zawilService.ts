@@ -13,6 +13,20 @@ const mockUploadHistory: UploadLog[] = [];
 let mockPermitIdCounter = 1;
 let mockUploadIdCounter = 1;
 
+export interface UploadProgress {
+  currentRow: number;
+  totalRows: number;
+  percentage: number;
+  status: string;
+}
+
+export interface UploadResults {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
 export class ZawilService {
   // Check if employee exists by MOI number
   static async findEmployeeByMOI(moiNumber: string): Promise<Employee | null> {
@@ -82,35 +96,58 @@ export class ZawilService {
     return data;
   }
 
-  // Check for duplicate permit
-  static async checkDuplicatePermit(moiNumber: string, issueDate: string): Promise<boolean> {
+  // Check for existing permit by MOI and Permit Number
+  static async findExistingPermit(moiNumber: string, permitNumber: string): Promise<ZawilPermit | null> {
     if (isDemoMode()) {
-      // Check mock data for duplicates
-      return mockZawilPermits.some(permit => 
-        permit.moi_number === moiNumber && permit.issue_date === issueDate
-      );
+      return mockZawilPermits.find(permit => 
+        permit.moi_number === moiNumber && permit.zawil_permit_id === permitNumber
+      ) || null;
     }
 
     try {
       const { data, error } = await supabase
         .from('zawil_permits')
-        .select('permit_id')
+        .select('*')
         .eq('moi_number', moiNumber)
-        .eq('issue_date', issueDate)
+        .eq('zawil_permit_id', permitNumber)
         .single();
 
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
-      return !!data;
+      return data;
     } catch (error) {
-      console.error('Error checking duplicate:', error);
-      return false;
+      console.error('Error finding existing permit:', error);
+      return null;
     }
   }
 
-  // Insert Zawil permit
+  // Find permit by MOI number only (for updates)
+  static async findPermitByMOI(moiNumber: string): Promise<ZawilPermit | null> {
+    if (isDemoMode()) {
+      return mockZawilPermits.find(permit => permit.moi_number === moiNumber) || null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('zawil_permits')
+        .select('*')
+        .eq('moi_number', moiNumber)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error finding permit by MOI:', error);
+      return null;
+    }
+  }
+
+  // Insert new Zawil permit
   static async insertZawilPermit(permitData: Partial<ZawilPermit>): Promise<ZawilPermit> {
     if (isDemoMode()) {
       // Create mock permit for demo
@@ -144,7 +181,6 @@ export class ZawilService {
         }
       };
       
-      console.log('Created mock permit:', mockPermit);
       mockZawilPermits.push(mockPermit);
       return mockPermit;
     }
@@ -165,20 +201,64 @@ export class ZawilService {
     return data;
   }
 
-  // Process Excel upload with employee auto-creation
-  static async processZawilUpload(
+  // Update existing Zawil permit
+  static async updateZawilPermit(permitId: number, permitData: Partial<ZawilPermit>): Promise<ZawilPermit> {
+    if (isDemoMode()) {
+      const permitIndex = mockZawilPermits.findIndex(p => p.permit_id === permitId);
+      if (permitIndex !== -1) {
+        mockZawilPermits[permitIndex] = { 
+          ...mockZawilPermits[permitIndex], 
+          ...permitData, 
+          updated_at: new Date().toISOString() 
+        };
+        return mockZawilPermits[permitIndex];
+      }
+      throw new Error('Permit not found');
+    }
+
+    const { data, error } = await supabase
+      .from('zawil_permits')
+      .update(permitData)
+      .eq('permit_id', permitId)
+      .select(`
+        *,
+        employee:employees(*)
+      `)
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update permit: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  // Process Excel upload with enhanced duplicate handling
+  static async processZawilUploadWithProgress(
     records: ZawilUploadRecord[],
     uploaderName: string,
-    fileName: string
-  ): Promise<ZawilUploadResult> {
+    fileName: string,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<UploadResults> {
     
-    if (isDemoMode()) {
-      let insertedCount = 0;
-      let skippedCount = 0;
-      const errors: string[] = [];
+    let insertedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+    const errors: string[] = [];
 
+    if (isDemoMode()) {
       // Process each valid record
-      for (const record of records) {
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        
+        // Update progress
+        onProgress?.({
+          currentRow: i + 1,
+          totalRows: records.length,
+          percentage: Math.round(((i + 1) / records.length) * 100),
+          status: `Processing ${record.englishName}...`
+        });
+
         if (record.status === 'error') {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${record.errors.join(', ')}`);
@@ -186,35 +266,54 @@ export class ZawilService {
         }
 
         try {
-          // Check for duplicate in mock data
-          const isDuplicate = mockZawilPermits.some(permit => 
-            permit.moi_number === record.moiNumber && permit.issue_date === record.issueDate
-          );
+          // Check for existing permit (Permit Number + MOI Number)
+          const existingPermit = await this.findExistingPermit(record.moiNumber, record.zawilPermitId);
           
-          if (isDuplicate) {
+          if (existingPermit) {
+            // Skip if both exist
             skippedCount++;
-            errors.push(`Row ${record.rowNumber}: Duplicate permit (MOI: ${record.moiNumber}, Issue Date: ${record.issueDate})`);
             continue;
           }
 
-          // Create mock permit
-          const newPermit = await this.insertZawilPermit({
-            zawil_permit_id: record.zawilPermitId,
-            permit_type: record.permitType,
-            issued_for: record.issuedFor,
-            arabic_name: record.arabicName,
-            english_name: record.englishName,
-            moi_number: record.moiNumber,
-            passport_number: record.passportNumber,
-            nationality: record.nationality,
-            plate_number: record.plateNumber,
-            port_name: record.portName,
-            issue_date: record.issueDate,
-            expiry_date: record.expiryDate,
-            employee_id: 1
-          });
+          // Check if MOI exists with different permit number
+          const existingByMOI = await this.findPermitByMOI(record.moiNumber);
+          
+          if (existingByMOI && existingByMOI.zawil_permit_id !== record.zawilPermitId) {
+            // Update existing record with new permit number
+            await this.updateZawilPermit(existingByMOI.permit_id, {
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
+              arabic_name: record.arabicName,
+              english_name: record.englishName,
+              passport_number: record.passportNumber,
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate
+            });
+            updatedCount++;
+          } else {
+            // Insert new record
+            await this.insertZawilPermit({
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
+              arabic_name: record.arabicName,
+              english_name: record.englishName,
+              moi_number: record.moiNumber,
+              passport_number: record.passportNumber,
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate,
+              employee_id: 1
+            });
+            insertedCount++;
+          }
 
-          insertedCount++;
         } catch (error) {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -235,20 +334,14 @@ export class ZawilService {
       mockUploadHistory.push(mockUploadLog);
 
       return {
-        success: true,
-        message: `Upload completed: ${insertedCount} inserted, ${skippedCount} skipped`,
-        insertedCount,
-        skippedCount,
-        errors,
-        uploadLogId: mockUploadLog.upload_id
+        inserted: insertedCount,
+        updated: updatedCount,
+        skipped: skippedCount,
+        errors
       };
     }
 
-    // Real database mode
-    let insertedCount = 0;
-    let skippedCount = 0;
-    const errors: string[] = [];
-
+    // Real database mode - similar logic but with actual database calls
     try {
       // Create upload log entry
       const { data: uploadLog, error: logError } = await supabase
@@ -267,7 +360,17 @@ export class ZawilService {
       }
 
       // Process each valid record
-      for (const record of records) {
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        
+        // Update progress
+        onProgress?.({
+          currentRow: i + 1,
+          totalRows: records.length,
+          percentage: Math.round(((i + 1) / records.length) * 100),
+          status: `Processing ${record.englishName}...`
+        });
+
         if (record.status === 'error') {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${record.errors.join(', ')}`);
@@ -275,46 +378,67 @@ export class ZawilService {
         }
 
         try {
-          // Check for duplicate
-          const isDuplicate = await this.checkDuplicatePermit(record.moiNumber, record.issueDate);
-          if (isDuplicate) {
+          // Check for existing permit (Permit Number + MOI Number)
+          const existingPermit = await this.findExistingPermit(record.moiNumber, record.zawilPermitId);
+          
+          if (existingPermit) {
+            // Skip if both exist
             skippedCount++;
-            errors.push(`Row ${record.rowNumber}: Duplicate permit (MOI: ${record.moiNumber}, Issue Date: ${record.issueDate})`);
             continue;
           }
 
-          // Find or create employee
-          let employee = await this.findEmployeeByMOI(record.moiNumber);
+          // Check if MOI exists with different permit number
+          const existingByMOI = await this.findPermitByMOI(record.moiNumber);
           
-          if (!employee) {
-            // Auto-create employee
-            employee = await this.createEmployee({
+          if (existingByMOI && existingByMOI.zawil_permit_id !== record.zawilPermitId) {
+            // Update existing record with new permit number
+            await this.updateZawilPermit(existingByMOI.permit_id, {
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
+              arabic_name: record.arabicName,
+              english_name: record.englishName,
+              passport_number: record.passportNumber,
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate
+            });
+            updatedCount++;
+          } else {
+            // Find or create employee
+            let employee = await this.findEmployeeByMOI(record.moiNumber);
+            
+            if (!employee) {
+              // Auto-create employee
+              employee = await this.createEmployee({
+                arabic_name: record.arabicName,
+                english_name: record.englishName,
+                moi_number: record.moiNumber,
+                passport_number: record.passportNumber,
+                nationality: record.nationality
+              });
+            }
+
+            // Insert new record
+            await this.insertZawilPermit({
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
               arabic_name: record.arabicName,
               english_name: record.englishName,
               moi_number: record.moiNumber,
               passport_number: record.passportNumber,
-              nationality: record.nationality
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate,
+              employee_id: employee.employee_id
             });
+            insertedCount++;
           }
-
-          // Insert Zawil permit
-          await this.insertZawilPermit({
-            zawil_permit_id: record.zawilPermitId,
-            permit_type: record.permitType,
-            issued_for: record.issuedFor,
-            arabic_name: record.arabicName,
-            english_name: record.englishName,
-            moi_number: record.moiNumber,
-            passport_number: record.passportNumber,
-            nationality: record.nationality,
-            plate_number: record.plateNumber,
-            port_name: record.portName,
-            issue_date: record.issueDate,
-            expiry_date: record.expiryDate,
-            employee_id: employee.employee_id
-          });
-
-          insertedCount++;
 
         } catch (error) {
           skippedCount++;
@@ -333,45 +457,132 @@ export class ZawilService {
         .eq('upload_id', uploadLog.upload_id);
 
       return {
-        success: true,
-        message: `Upload completed: ${insertedCount} inserted, ${skippedCount} skipped`,
-        insertedCount,
-        skippedCount,
-        errors,
-        uploadLogId: uploadLog.upload_id
+        inserted: insertedCount,
+        updated: updatedCount,
+        skipped: skippedCount,
+        errors
       };
 
     } catch (error) {
-      return {
-        success: false,
-        message: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        insertedCount,
-        skippedCount,
-        errors: [...errors, error instanceof Error ? error.message : 'Unknown error']
-      };
+      throw new Error(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  // Get all Zawil permits with employee data
-  static async getZawilPermits(): Promise<ZawilPermit[]> {
+  // Get all Zawil permits with enhanced filtering and pagination
+  static async getZawilPermits(filters?: {
+    search?: string;
+    status?: string;
+    permitType?: string;
+    issueDateFrom?: string;
+    issueDateTo?: string;
+    expiryDateFrom?: string;
+    expiryDateTo?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ permits: ZawilPermit[], total: number }> {
     
     if (isDemoMode()) {
-      return mockZawilPermits;
+      let filteredPermits = [...mockZawilPermits];
+
+      // Apply filters
+      if (filters?.search) {
+        const search = filters.search.toLowerCase();
+        filteredPermits = filteredPermits.filter(permit =>
+          permit.english_name.toLowerCase().includes(search) ||
+          permit.moi_number.includes(search) ||
+          permit.zawil_permit_id.toLowerCase().includes(search)
+        );
+      }
+
+      if (filters?.status) {
+        filteredPermits = filteredPermits.filter(permit => permit.status === filters.status);
+      }
+
+      if (filters?.permitType) {
+        filteredPermits = filteredPermits.filter(permit => 
+          permit.permit_type.toLowerCase().includes(filters.permitType!.toLowerCase())
+        );
+      }
+
+      if (filters?.issueDateFrom) {
+        filteredPermits = filteredPermits.filter(permit => permit.issue_date >= filters.issueDateFrom!);
+      }
+
+      if (filters?.issueDateTo) {
+        filteredPermits = filteredPermits.filter(permit => permit.issue_date <= filters.issueDateTo!);
+      }
+
+      if (filters?.expiryDateFrom) {
+        filteredPermits = filteredPermits.filter(permit => permit.expiry_date >= filters.expiryDateFrom!);
+      }
+
+      if (filters?.expiryDateTo) {
+        filteredPermits = filteredPermits.filter(permit => permit.expiry_date <= filters.expiryDateTo!);
+      }
+
+      // Apply pagination
+      const total = filteredPermits.length;
+      const page = filters?.page || 1;
+      const limit = filters?.limit || 20;
+      const offset = (page - 1) * limit;
+      
+      const paginatedPermits = filteredPermits.slice(offset, offset + limit);
+
+      return { permits: paginatedPermits, total };
     }
 
-    const { data, error } = await supabase
+    // Build query
+    let query = supabase
       .from('zawil_permits')
       .select(`
         *,
         employee:employees(*)
-      `)
-      .order('expiry_date', { ascending: true });
+      `, { count: 'exact' });
+
+    // Apply filters
+    if (filters?.search) {
+      query = query.or(`english_name.ilike.%${filters.search}%,moi_number.ilike.%${filters.search}%,zawil_permit_id.ilike.%${filters.search}%`);
+    }
+
+    if (filters?.status) {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters?.permitType) {
+      query = query.ilike('permit_type', `%${filters.permitType}%`);
+    }
+
+    if (filters?.issueDateFrom) {
+      query = query.gte('issue_date', filters.issueDateFrom);
+    }
+
+    if (filters?.issueDateTo) {
+      query = query.lte('issue_date', filters.issueDateTo);
+    }
+
+    if (filters?.expiryDateFrom) {
+      query = query.gte('expiry_date', filters.expiryDateFrom);
+    }
+
+    if (filters?.expiryDateTo) {
+      query = query.lte('expiry_date', filters.expiryDateTo);
+    }
+
+    // Apply pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const offset = (page - 1) * limit;
+    
+    query = query.range(offset, offset + limit - 1);
+    query = query.order('expiry_date', { ascending: true });
+
+    const { data, error, count } = await query;
 
     if (error) {
       throw new Error(`Failed to fetch permits: ${error.message}`);
     }
 
-    return data || [];
+    return { permits: data || [], total: count || 0 };
   }
 
   // Update permit status
@@ -530,5 +741,22 @@ export class ZawilService {
     a.download = `zawil-permits-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // Legacy method for backward compatibility
+  static async processZawilUpload(
+    records: ZawilUploadRecord[],
+    uploaderName: string,
+    fileName: string
+  ): Promise<ZawilUploadResult> {
+    const result = await this.processZawilUploadWithProgress(records, uploaderName, fileName);
+    
+    return {
+      success: true,
+      message: `Upload completed: ${result.inserted} inserted, ${result.updated} updated, ${result.skipped} skipped`,
+      insertedCount: result.inserted,
+      skippedCount: result.skipped,
+      errors: result.errors
+    };
   }
 }
