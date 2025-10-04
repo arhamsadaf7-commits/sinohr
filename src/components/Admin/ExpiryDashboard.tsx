@@ -741,6 +741,7 @@ export const ExpiryDashboard: React.FC = () => {
                     </td>
                     {activeTab === 'zawil' ? (
                       <>
+                      <>
                         <td className="px-4 py-3 font-mono text-sm">{permit.zawil_permit_id}</td>
                         <td className="px-4 py-3 text-sm">{permit.permit_type}</td>
                         <td className="px-4 py-3 text-sm">{permit.issued_for}</td>
