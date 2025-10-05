@@ -40,10 +40,11 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
     try {
       setLoading(true);
       const data = await ZawilService.getZawilPermits();
-      setPermits(data);
+      setPermits(data.permits || []);
     } catch (error) {
       console.error('Error loading permits:', error);
       NotificationService.error('Failed to load permits');
+      setPermits([]);
     } finally {
       setLoading(false);
     }
