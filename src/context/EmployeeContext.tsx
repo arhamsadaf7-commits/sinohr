@@ -137,23 +137,33 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const loadZawilData = async () => {
     try {
       const permits = await ZawilService.getZawilPermits();
-      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits.permits || [] });
+      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits });
     } catch (error) {
       // Silently handle error
-      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: [] });
     }
   };
 
   // Listen for Zawil data updates
   useEffect(() => {
-    const handleCustomEvent = () => {
-      loadZawilData();
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'zawil_data_updated') {
+        loadZawilData();
+        localStorage.removeItem('zawil_data_updated');
+      }
     };
 
-    window.addEventListener('zawil_data_updated', handleCustomEvent);
+    const handleCustomEvent = (e: CustomEvent) => {
+      if (e.detail === 'zawil_data_updated') {
+        loadZawilData();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('zawil_data_updated' as any, handleCustomEvent);
 
     return () => {
-      window.removeEventListener('zawil_data_updated', handleCustomEvent);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('zawil_data_updated' as any, handleCustomEvent);
     };
   }, []);
   return (
