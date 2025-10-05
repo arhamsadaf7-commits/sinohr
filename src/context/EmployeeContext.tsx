@@ -137,9 +137,10 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const loadZawilData = async () => {
     try {
       const permits = await ZawilService.getZawilPermits();
-      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits });
+      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: permits.permits || [] });
     } catch (error) {
       // Silently handle error
+      dispatch({ type: 'SET_ZAWIL_PERMITS', payload: [] });
     }
   };
 
