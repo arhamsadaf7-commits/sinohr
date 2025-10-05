@@ -62,12 +62,3 @@ export interface ZawilUploadRecord {
   errors: string[];
   isDuplicate?: boolean;
 }
-
-export interface ZawilUploadResult {
-  success: boolean;
-  message: string;
-  insertedCount: number;
-  skippedCount: number;
-  errors: string[];
-  uploadLogId?: number;
-}

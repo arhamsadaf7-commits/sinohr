@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, Calendar, User, FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { ZawilService } from '../../services/zawilService';
 import { ZawilPermit } from '../../types/zawil';
@@ -18,6 +18,7 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(20);
+  const [selectedPermits, setSelectedPermits] = useState<string[]>([]);
 
   useEffect(() => {
     loadPermits();
@@ -39,7 +40,7 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
   const loadPermits = async () => {
     try {
       setLoading(true);
-      const data = await ZawilService.getZawilPermits();
+      const data = await ZawilService.getZawilPermits({ limit: 1000 });
       setPermits(data.permits || []);
     } catch (error) {
       console.error('Error loading permits:', error);
@@ -50,6 +51,17 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
     }
   };
 
+  // Calculate statistics
+  const stats = useMemo(() => {
+    const total = permits.length;
+    const expired = permits.filter(p => p.status === 'Expired').length;
+    const expiringSoon = permits.filter(p => p.status === 'Expiring Soon').length;
+    const valid = permits.filter(p => p.status === 'Valid').length;
+    const done = permits.filter(p => p.status === 'Done').length;
+    
+    return { total, expired, expiringSoon, valid, done };
+  }, [permits]);
+
   const applyFilters = () => {
     let filtered = [...permits];
 
@@ -57,9 +69,9 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(permit =>
-        permit.employeeName?.toLowerCase().includes(term) ||
-        permit.moiNumber?.toLowerCase().includes(term) ||
-        permit.permitNumber?.toLowerCase().includes(term)
+        permit.english_name?.toLowerCase().includes(term) ||
+        permit.moi_number?.toLowerCase().includes(term) ||
+        permit.zawil_permit_id?.toLowerCase().includes(term)
       );
     }
 
@@ -83,14 +95,14 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
 
     // Permit type filter
     if (permitTypeFilter !== 'all') {
-      filtered = filtered.filter(permit => permit.permitType === permitTypeFilter);
+      filtered = filtered.filter(permit => permit.permit_type === permitTypeFilter);
     }
 
     // Date range filter
     if (dateRangeFilter !== 'all') {
       const now = new Date();
       filtered = filtered.filter(permit => {
-        const expiryDate = new Date(permit.expiryDate);
+        const expiryDate = new Date(permit.expiry_date);
         switch (dateRangeFilter) {
           case 'next30':
             return expiryDate <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -108,15 +120,15 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
     setCurrentPage(1);
   };
 
-  const handleStatusToggle = async (permitId: string, currentStatus: string) => {
+  const handleStatusToggle = async (permitId: number, currentStatus: string) => {
     try {
       const newStatus = currentStatus === 'Done' ? 'UNDONE' : 'Done';
       await ZawilService.updatePermitStatus(permitId, newStatus);
       
       // Update local state
       setPermits(prev => prev.map(permit => 
-        permit.id === permitId 
-          ? { ...permit, status: newStatus === 'UNDONE' ? calculateStatus(permit.expiryDate) : 'Done' }
+        permit.permit_id === permitId 
+          ? { ...permit, status: newStatus === 'UNDONE' ? calculateStatus(permit.expiry_date) : 'Done' }
           : permit
       ));
       
@@ -124,6 +136,30 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
     } catch (error) {
       console.error('Error updating permit status:', error);
       NotificationService.error('Failed to update permit status');
+    }
+  };
+
+  const handleBulkStatusUpdate = async (status: string) => {
+    if (selectedPermits.length === 0) {
+      NotificationService.warning('Please select permits to update');
+      return;
+    }
+
+    try {
+      const permitIds = selectedPermits.map(id => parseInt(id));
+      await ZawilService.bulkUpdateStatus(permitIds, status);
+      
+      // Update local state
+      setPermits(prev => prev.map(permit => 
+        selectedPermits.includes(permit.permit_id.toString())
+          ? { ...permit, status: status as any }
+          : permit
+      ));
+      
+      setSelectedPermits([]);
+      NotificationService.success(`Updated ${selectedPermits.length} permits to ${status}`);
+    } catch (error) {
+      NotificationService.error('Failed to update permits');
     }
   };
 
@@ -173,7 +209,7 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
   const endIndex = startIndex + recordsPerPage;
   const currentPermits = filteredPermits.slice(startIndex, endIndex);
 
-  const uniquePermitTypes = [...new Set(permits.map(p => p.permitType).filter(Boolean))];
+  const uniquePermitTypes = [...new Set(permits.map(p => p.permit_type).filter(Boolean))];
 
   if (loading) {
     return (
@@ -184,10 +220,45 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-8 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+            <div className="text-sm text-gray-600">Total Permits</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-red-600">{stats.expired}</div>
+            <div className="text-sm text-gray-600">Expired</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-yellow-600">{stats.expiringSoon}</div>
+            <div className="text-sm text-gray-600">Expiring Soon</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-green-600">{stats.valid}</div>
+            <div className="text-sm text-gray-600">Valid</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm border">
+            <div className="text-2xl font-bold text-blue-600">{stats.done}</div>
+            <div className="text-sm text-gray-600">Done</div>
+          </div>
+        </div>
+
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Zawil Expiry Dashboard</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Zawil Expiry Dashboard</h2>
+          <p className="text-gray-600">Monitor and manage Zawil permit expiry dates</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => ZawilService.exportToCSV(filteredPermits)}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Export CSV
+          </button>
         <button
           onClick={loadPermits}
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -195,6 +266,7 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
           Refresh
         </button>
       </div>
+        </div>
 
       {/* Search and Filters */}
       <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -204,7 +276,7 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search by name, MOI, or permit number..."
+              placeholder="Search by name, MOI number, or permit ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -250,6 +322,20 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
         </div>
       </div>
 
+      {/* Bulk Actions */}
+      {selectedPermits.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-blue-800 font-medium">{selectedPermits.length} permits selected</span>
+            <div className="flex gap-2">
+              <button onClick={() => handleBulkStatusUpdate('Done')} className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">Mark as Done</button>
+              <button onClick={() => handleBulkStatusUpdate('Valid')} className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700">Mark as Valid</button>
+              <button onClick={() => setSelectedPermits([])} className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700">Clear Selection</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Results Summary */}
       <div className="bg-white p-4 rounded-lg shadow-sm border">
         <div className="flex justify-between items-center">
@@ -277,6 +363,13 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-4 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedPermits.length === currentPermits.length && currentPermits.length > 0}
+                    onChange={(e) => setSelectedPermits(e.target.checked ? currentPermits.map(p => p.permit_id.toString()) : [])}
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Employee
                 </th>
@@ -305,29 +398,38 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {currentPermits.map((permit) => (
-                <tr key={permit.id} className="hover:bg-gray-50">
+                <tr key={permit.permit_id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedPermits.includes(permit.permit_id.toString())}
+                      onChange={(e) => setSelectedPermits(prev => 
+                        e.target.checked ? [...prev, permit.permit_id.toString()] : prev.filter(id => id !== permit.permit_id.toString())
+                      )}
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center">
                       <User className="w-4 h-4 text-gray-400 mr-2" />
                       <span className="text-sm font-medium text-gray-900">
-                        {permit.employeeName || 'N/A'}
+                        {permit.english_name || 'N/A'}
                       </span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">
-                    {permit.moiNumber || 'N/A'}
+                    {permit.moi_number || 'N/A'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">
-                    {permit.permitNumber || 'N/A'}
+                    {permit.zawil_permit_id || 'N/A'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">
-                    {permit.permitType || 'N/A'}
+                    {permit.permit_type || 'N/A'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">
-                    {permit.issueDate ? new Date(permit.issueDate).toLocaleDateString() : 'N/A'}
+                    {permit.issue_date ? new Date(permit.issue_date).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900">
-                    {permit.expiryDate ? new Date(permit.expiryDate).toLocaleDateString() : 'N/A'}
+                    {permit.expiry_date ? new Date(permit.expiry_date).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center">
@@ -341,14 +443,14 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
                     <div className="flex gap-2">
                       {permit.status === 'Done' ? (
                         <button
-                          onClick={() => handleStatusToggle(permit.id, permit.status)}
+                          onClick={() => handleStatusToggle(permit.permit_id, permit.status)}
                           className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded hover:bg-gray-200 transition-colors"
                         >
                           Mark as UNDONE
                         </button>
                       ) : (
                         <button
-                          onClick={() => handleStatusToggle(permit.id, permit.status)}
+                          onClick={() => handleStatusToggle(permit.permit_id, permit.status)}
                           className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded hover:bg-blue-200 transition-colors"
                         >
                           Mark as DONE
@@ -405,6 +507,7 @@ export const ExpiryDashboard: React.FC<ExpiryDashboardProps> = ({ onRefresh }) =
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 };

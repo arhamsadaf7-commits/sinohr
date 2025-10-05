@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Employee, ZawilPermit, UploadLog, ZawilUploadRecord, ZawilUploadResult } from '../types/zawil';
+import { Employee, ZawilPermit, UploadLog, ZawilUploadRecord } from '../types/zawil';
 
 // Check if we're in demo mode (mock authentication)
 const isDemoMode = () => {
@@ -18,6 +18,13 @@ export interface UploadProgress {
   totalRows: number;
   percentage: number;
   status: string;
+}
+
+export interface UploadResults {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface UploadResults {
@@ -743,20 +750,4 @@ export class ZawilService {
     URL.revokeObjectURL(url);
   }
 
-  // Legacy method for backward compatibility
-  static async processZawilUpload(
-    records: ZawilUploadRecord[],
-    uploaderName: string,
-    fileName: string
-  ): Promise<ZawilUploadResult> {
-    const result = await this.processZawilUploadWithProgress(records, uploaderName, fileName);
-    
-    return {
-      success: true,
-      message: `Upload completed: ${result.inserted} inserted, ${result.updated} updated, ${result.skipped} skipped`,
-      insertedCount: result.inserted,
-      skippedCount: result.skipped,
-      errors: result.errors
-    };
-  }
 }
