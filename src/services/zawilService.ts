@@ -266,6 +266,8 @@ export class ZawilService {
           status: `Processing ${record.englishName}...`
         });
 
+        // Add small delay for demo to show progress
+        await new Promise(resolve => setTimeout(resolve, 100));
         if (record.status === 'error') {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${record.errors.join(', ')}`);
@@ -334,6 +336,7 @@ export class ZawilService {
         file_name: fileName,
         upload_date: new Date().toISOString(),
         rows_inserted: insertedCount,
+        rows_updated: updatedCount,
         rows_skipped: skippedCount,
         total_rows: records.length,
         upload_status: 'Completed'
@@ -458,6 +461,7 @@ export class ZawilService {
         .from('upload_log')
         .update({
           rows_inserted: insertedCount,
+          rows_updated: updatedCount,
           rows_skipped: skippedCount,
           upload_status: 'Completed'
         })

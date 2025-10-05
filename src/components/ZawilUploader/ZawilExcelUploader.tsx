@@ -202,14 +202,14 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
 
     try {
       // Process Excel file
-      const records = previewData.length > 0 ? previewData : await processExcelFile(file);
+      let records = previewData.length > 0 ? previewData : await processExcelFile(file);
       
       if (records.length === 0) {
         throw new Error('No valid records found in the Excel file');
       }
 
       // Filter out error records for upload
-      const validRecords = records.filter(r => r.status !== 'error');
+      const validRecords = records.filter(r => r.status === 'success' || r.status === 'warning');
       
       if (validRecords.length === 0) {
         throw new Error('No valid records to upload. Please fix the errors and try again.');
@@ -237,8 +237,7 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
       toast.success(`Successfully processed ${result.inserted + result.updated} records`);
 
       // Trigger refresh events
-      localStorage.setItem('zawil_data_updated', Date.now().toString());
-      window.dispatchEvent(new CustomEvent('zawil_data_updated', { detail: 'zawil_data_updated' }));
+      window.dispatchEvent(new CustomEvent('zawil_data_updated'));
 
       // Reset form
       setFile(null);

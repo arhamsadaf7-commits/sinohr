@@ -146,16 +146,14 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Listen for Zawil data updates
   useEffect(() => {
-    const handleCustomEvent = (e: CustomEvent) => {
-      if (e.detail === 'zawil_data_updated') {
-        loadZawilData();
-      }
+    const handleCustomEvent = () => {
+      loadZawilData();
     };
 
-    window.addEventListener('zawil_data_updated' as any, handleCustomEvent);
+    window.addEventListener('zawil_data_updated', handleCustomEvent);
 
     return () => {
-      window.removeEventListener('zawil_data_updated' as any, handleCustomEvent);
+      window.removeEventListener('zawil_data_updated', handleCustomEvent);
     };
   }, []);
   return (
