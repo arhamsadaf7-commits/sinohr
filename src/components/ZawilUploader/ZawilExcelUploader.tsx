@@ -14,6 +14,10 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [uploadMessage, setUploadMessage] = useState('');
   const [uploadedCount, setUploadedCount] = useState(0);
+  const [updatedCount, setUpdatedCount] = useState(0);
+  const [progressCurrent, setProgressCurrent] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
+  const [progressPercentage, setProgressPercentage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -148,38 +152,47 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
     setUploading(true);
     setUploadStatus('idle');
     setUploadMessage('Processing file...');
+    setProgressCurrent(0);
+    setProgressTotal(0);
+    setProgressPercentage(0);
+    setUploadedCount(0);
+    setUpdatedCount(0);
 
     try {
-      
       // Process Excel file
       const records = await processExcelFile(file);
-      
+
       if (records.length === 0) {
         throw new Error('No valid records found in the Excel file');
       }
 
       setUploadMessage(`Processing ${records.length} records...`);
+      setProgressTotal(records.length);
 
-      // Upload to service
-      const result = await ZawilService.processZawilUpload(records, 'Excel Upload', file.name);
-      
+      // Upload to service with progress callback
+      const result = await ZawilService.processZawilUpload(
+        records,
+        'Excel Upload',
+        file.name,
+        (current, total, percentage) => {
+          setProgressCurrent(current);
+          setProgressTotal(total);
+          setProgressPercentage(percentage);
+        }
+      );
+
       if (!result.success) {
         throw new Error(result.message);
       }
-      
+
       setUploadedCount(result.insertedCount);
+      setUpdatedCount(result.updatedCount);
       setUploadStatus('success');
-      setUploadMessage(`Successfully uploaded ${result.insertedCount} Zawil permits`);
+      setUploadMessage(`Upload completed successfully`);
 
       // Trigger refresh events
       localStorage.setItem('zawil_data_updated', Date.now().toString());
       window.dispatchEvent(new CustomEvent('zawil_data_updated', { detail: 'zawil_data_updated' }));
-
-      // Reset form
-      setFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
 
       // Callback
       onUploadComplete?.();
@@ -196,6 +209,11 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
     setFile(null);
     setUploadStatus('idle');
     setUploadMessage('');
+    setUploadedCount(0);
+    setUpdatedCount(0);
+    setProgressCurrent(0);
+    setProgressTotal(0);
+    setProgressPercentage(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -263,7 +281,7 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
         </div>
 
         {/* Upload Button */}
-        {file && (
+        {file && !uploadStatus && (
           <div className="mt-6">
             <button
               onClick={handleUpload}
@@ -274,48 +292,100 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
-              {uploading ? 'Uploading...' : 'Upload Zawil Data'}
+              {uploading ? 'Processing...' : 'Upload Zawil Data'}
             </button>
           </div>
         )}
 
-        {/* Status Messages */}
-        {uploadMessage && (
-          <div className={`mt-4 p-4 rounded-lg flex items-center ${
-            uploadStatus === 'success' 
-              ? 'bg-green-50 text-green-800' 
-              : uploadStatus === 'error'
-              ? 'bg-red-50 text-red-800'
-              : 'bg-blue-50 text-blue-800'
-          }`}>
-            {uploadStatus === 'success' && <CheckCircle className="w-5 h-5 mr-2" />}
-            {uploadStatus === 'error' && <AlertCircle className="w-5 h-5 mr-2" />}
-            <span>{uploadMessage}</span>
-            {uploadStatus === 'success' && uploadedCount > 0 && (
-              <span className="ml-2 font-semibold">({uploadedCount} records)</span>
-            )}
+        {/* Progress Bar */}
+        {uploading && progressTotal > 0 && (
+          <div className="mt-6 space-y-2">
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Processing records...</span>
+              <span>{progressCurrent} / {progressTotal} ({progressPercentage}%)</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-blue-600 h-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Error Banner */}
+        {uploadStatus === 'error' && uploadMessage && (
+          <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-3 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-red-800 mb-1">Upload Failed</h3>
+                <p className="text-sm text-red-700">{uploadMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Results Page */}
+        {uploadStatus === 'success' && (
+          <div className="mt-6 space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+              <div className="flex items-center mb-4">
+                <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
+                <h3 className="text-lg font-semibold text-green-900">Upload Successful</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white rounded-lg p-4 border border-green-200">
+                  <p className="text-sm text-gray-600 mb-1">Records Inserted</p>
+                  <p className="text-3xl font-bold text-green-600">{uploadedCount}</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                  <p className="text-sm text-gray-600 mb-1">Records Updated</p>
+                  <p className="text-3xl font-bold text-blue-600">{updatedCount}</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
+                  <p className="text-sm text-gray-600 mb-1">Total Processed</p>
+                  <p className="text-3xl font-bold text-gray-700">{uploadedCount + updatedCount}</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={clearFile}
+                  className="w-full py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  Upload Another File
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
         {/* Instructions */}
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h3 className="font-medium text-gray-900 mb-2">Excel File Format:</h3>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Zawil Permit ID (required)</li>
-            <li>• Permit Type (required)</li>
-            <li>• Issued For (required)</li>
-            <li>• Arabic Name</li>
-            <li>• English Name (required)</li>
-            <li>• MOI Number (required)</li>
-            <li>• Passport Number</li>
-            <li>• Nationality</li>
-            <li>• Plate Number</li>
-            <li>• Port Name (required)</li>
-            <li>• Issue Date (required)</li>
-            <li>• Expiry Date (required)</li>
-            <li>• Status</li>
-          </ul>
-        </div>
+        {uploadStatus !== 'success' && (
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-medium text-gray-900 mb-2">Excel File Format:</h3>
+            <ul className="text-sm text-gray-600 space-y-1">
+              <li>• Zawil Permit ID (required)</li>
+              <li>• Permit Type (required)</li>
+              <li>• Issued For (required)</li>
+              <li>• Arabic Name</li>
+              <li>• English Name (required)</li>
+              <li>• MOI Number (required)</li>
+              <li>• Passport Number</li>
+              <li>• Nationality</li>
+              <li>• Plate Number</li>
+              <li>• Port Name (required)</li>
+              <li>• Issue Date (required)</li>
+              <li>• Expiry Date (required)</li>
+              <li>• Status</li>
+            </ul>
+            <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>Smart Duplicate Handling:</strong> If the same MOI Number exists with a different Permit Number, the record will be updated with the new Permit Number.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

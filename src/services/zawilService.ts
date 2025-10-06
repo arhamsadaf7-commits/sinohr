@@ -82,31 +82,56 @@ export class ZawilService {
     return data;
   }
 
-  // Check for duplicate permit
-  static async checkDuplicatePermit(moiNumber: string, issueDate: string): Promise<boolean> {
+  // Check for existing permit by Permit Number + MOI Number
+  static async findExistingPermit(zawilPermitId: string, moiNumber: string): Promise<ZawilPermit | null> {
     if (isDemoMode()) {
-      // Check mock data for duplicates
-      return mockZawilPermits.some(permit => 
-        permit.moi_number === moiNumber && permit.issue_date === issueDate
+      const found = mockZawilPermits.find(permit =>
+        permit.zawil_permit_id === zawilPermitId && permit.moi_number === moiNumber
       );
+      return found || null;
     }
 
     try {
       const { data, error } = await supabase
         .from('zawil_permits')
-        .select('permit_id')
+        .select('*')
+        .eq('zawil_permit_id', zawilPermitId)
         .eq('moi_number', moiNumber)
-        .eq('issue_date', issueDate)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         throw error;
       }
 
-      return !!data;
+      return data;
     } catch (error) {
-      console.error('Error checking duplicate:', error);
-      return false;
+      console.error('Error finding existing permit:', error);
+      return null;
+    }
+  }
+
+  // Check for permit by MOI Number only (to check if different permit number exists)
+  static async findPermitByMOI(moiNumber: string): Promise<ZawilPermit | null> {
+    if (isDemoMode()) {
+      const found = mockZawilPermits.find(permit => permit.moi_number === moiNumber);
+      return found || null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('zawil_permits')
+        .select('*')
+        .eq('moi_number', moiNumber)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error finding permit by MOI:', error);
+      return null;
     }
   }
 
@@ -165,20 +190,30 @@ export class ZawilService {
     return data;
   }
 
-  // Process Excel upload with employee auto-creation
+  // Process Excel upload with smart duplicate handling and progress tracking
   static async processZawilUpload(
     records: ZawilUploadRecord[],
     uploaderName: string,
-    fileName: string
+    fileName: string,
+    onProgress?: (current: number, total: number, percentage: number) => void
   ): Promise<ZawilUploadResult> {
-    
+
     if (isDemoMode()) {
       let insertedCount = 0;
+      let updatedCount = 0;
       let skippedCount = 0;
       const errors: string[] = [];
 
       // Process each valid record
-      for (const record of records) {
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+
+        // Report progress
+        if (onProgress) {
+          const percentage = Math.round(((i + 1) / records.length) * 100);
+          onProgress(i + 1, records.length, percentage);
+        }
+
         if (record.status === 'error') {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${record.errors.join(', ')}`);
@@ -186,35 +221,56 @@ export class ZawilService {
         }
 
         try {
-          // Check for duplicate in mock data
-          const isDuplicate = mockZawilPermits.some(permit => 
-            permit.moi_number === record.moiNumber && permit.issue_date === record.issueDate
+          // Check if both Permit Number + MOI Number exist
+          const existingWithBoth = mockZawilPermits.find(permit =>
+            permit.zawil_permit_id === record.zawilPermitId && permit.moi_number === record.moiNumber
           );
-          
-          if (isDuplicate) {
+
+          if (existingWithBoth) {
+            // Both exist - skip (prevent duplicates)
             skippedCount++;
-            errors.push(`Row ${record.rowNumber}: Duplicate permit (MOI: ${record.moiNumber}, Issue Date: ${record.issueDate})`);
             continue;
           }
 
-          // Create mock permit
-          const newPermit = await this.insertZawilPermit({
-            zawil_permit_id: record.zawilPermitId,
-            permit_type: record.permitType,
-            issued_for: record.issuedFor,
-            arabic_name: record.arabicName,
-            english_name: record.englishName,
-            moi_number: record.moiNumber,
-            passport_number: record.passportNumber,
-            nationality: record.nationality,
-            plate_number: record.plateNumber,
-            port_name: record.portName,
-            issue_date: record.issueDate,
-            expiry_date: record.expiryDate,
-            employee_id: 1
-          });
+          // Check if MOI Number exists with different Permit Number
+          const existingWithMOI = mockZawilPermits.find(permit =>
+            permit.moi_number === record.moiNumber && permit.zawil_permit_id !== record.zawilPermitId
+          );
 
-          insertedCount++;
+          if (existingWithMOI) {
+            // Update existing record with new Permit Number
+            existingWithMOI.zawil_permit_id = record.zawilPermitId;
+            existingWithMOI.permit_type = record.permitType;
+            existingWithMOI.issued_for = record.issuedFor;
+            existingWithMOI.arabic_name = record.arabicName;
+            existingWithMOI.english_name = record.englishName;
+            existingWithMOI.passport_number = record.passportNumber;
+            existingWithMOI.nationality = record.nationality;
+            existingWithMOI.plate_number = record.plateNumber;
+            existingWithMOI.port_name = record.portName;
+            existingWithMOI.issue_date = record.issueDate;
+            existingWithMOI.expiry_date = record.expiryDate;
+            existingWithMOI.updated_at = new Date().toISOString();
+            updatedCount++;
+          } else {
+            // Neither exist - insert new record
+            const newPermit = await this.insertZawilPermit({
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
+              arabic_name: record.arabicName,
+              english_name: record.englishName,
+              moi_number: record.moiNumber,
+              passport_number: record.passportNumber,
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate,
+              employee_id: 1
+            });
+            insertedCount++;
+          }
         } catch (error) {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -236,8 +292,9 @@ export class ZawilService {
 
       return {
         success: true,
-        message: `Upload completed: ${insertedCount} inserted, ${skippedCount} skipped`,
+        message: `Upload completed: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped`,
         insertedCount,
+        updatedCount,
         skippedCount,
         errors,
         uploadLogId: mockUploadLog.upload_id
@@ -246,6 +303,7 @@ export class ZawilService {
 
     // Real database mode
     let insertedCount = 0;
+    let updatedCount = 0;
     let skippedCount = 0;
     const errors: string[] = [];
 
@@ -267,7 +325,15 @@ export class ZawilService {
       }
 
       // Process each valid record
-      for (const record of records) {
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+
+        // Report progress
+        if (onProgress) {
+          const percentage = Math.round(((i + 1) / records.length) * 100);
+          onProgress(i + 1, records.length, percentage);
+        }
+
         if (record.status === 'error') {
           skippedCount++;
           errors.push(`Row ${record.rowNumber}: ${record.errors.join(', ')}`);
@@ -275,46 +341,68 @@ export class ZawilService {
         }
 
         try {
-          // Check for duplicate
-          const isDuplicate = await this.checkDuplicatePermit(record.moiNumber, record.issueDate);
-          if (isDuplicate) {
+          // Check if both Permit Number + MOI Number exist
+          const existingWithBoth = await this.findExistingPermit(record.zawilPermitId, record.moiNumber);
+
+          if (existingWithBoth) {
+            // Both exist - skip (prevent duplicates)
             skippedCount++;
-            errors.push(`Row ${record.rowNumber}: Duplicate permit (MOI: ${record.moiNumber}, Issue Date: ${record.issueDate})`);
             continue;
           }
 
-          // Find or create employee
-          let employee = await this.findEmployeeByMOI(record.moiNumber);
-          
-          if (!employee) {
-            // Auto-create employee
-            employee = await this.createEmployee({
+          // Check if MOI Number exists with different Permit Number
+          const existingWithMOI = await this.findPermitByMOI(record.moiNumber);
+
+          if (existingWithMOI && existingWithMOI.zawil_permit_id !== record.zawilPermitId) {
+            // Update existing record with new Permit Number
+            await this.updatePermit(existingWithMOI.permit_id, {
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
+              arabic_name: record.arabicName,
+              english_name: record.englishName,
+              passport_number: record.passportNumber,
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate
+            });
+            updatedCount++;
+          } else {
+            // Neither exist - insert new record
+            // Find or create employee
+            let employee = await this.findEmployeeByMOI(record.moiNumber);
+
+            if (!employee) {
+              // Auto-create employee
+              employee = await this.createEmployee({
+                arabic_name: record.arabicName,
+                english_name: record.englishName,
+                moi_number: record.moiNumber,
+                passport_number: record.passportNumber,
+                nationality: record.nationality
+              });
+            }
+
+            // Insert Zawil permit
+            await this.insertZawilPermit({
+              zawil_permit_id: record.zawilPermitId,
+              permit_type: record.permitType,
+              issued_for: record.issuedFor,
               arabic_name: record.arabicName,
               english_name: record.englishName,
               moi_number: record.moiNumber,
               passport_number: record.passportNumber,
-              nationality: record.nationality
+              nationality: record.nationality,
+              plate_number: record.plateNumber,
+              port_name: record.portName,
+              issue_date: record.issueDate,
+              expiry_date: record.expiryDate,
+              employee_id: employee.employee_id
             });
+            insertedCount++;
           }
-
-          // Insert Zawil permit
-          await this.insertZawilPermit({
-            zawil_permit_id: record.zawilPermitId,
-            permit_type: record.permitType,
-            issued_for: record.issuedFor,
-            arabic_name: record.arabicName,
-            english_name: record.englishName,
-            moi_number: record.moiNumber,
-            passport_number: record.passportNumber,
-            nationality: record.nationality,
-            plate_number: record.plateNumber,
-            port_name: record.portName,
-            issue_date: record.issueDate,
-            expiry_date: record.expiryDate,
-            employee_id: employee.employee_id
-          });
-
-          insertedCount++;
 
         } catch (error) {
           skippedCount++;
@@ -334,8 +422,9 @@ export class ZawilService {
 
       return {
         success: true,
-        message: `Upload completed: ${insertedCount} inserted, ${skippedCount} skipped`,
+        message: `Upload completed: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped`,
         insertedCount,
+        updatedCount,
         skippedCount,
         errors,
         uploadLogId: uploadLog.upload_id
@@ -345,8 +434,9 @@ export class ZawilService {
       return {
         success: false,
         message: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        insertedCount,
-        skippedCount,
+        insertedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
         errors: [...errors, error instanceof Error ? error.message : 'Unknown error']
       };
     }
