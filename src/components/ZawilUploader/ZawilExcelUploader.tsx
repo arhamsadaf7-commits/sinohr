@@ -281,7 +281,7 @@ export const ZawilExcelUploader: React.FC<ZawilExcelUploaderProps> = ({ onUpload
         </div>
 
         {/* Upload Button */}
-        {file && !uploadStatus && (
+        {file && uploadStatus === 'idle' && (
           <div className="mt-6">
             <button
               onClick={handleUpload}
