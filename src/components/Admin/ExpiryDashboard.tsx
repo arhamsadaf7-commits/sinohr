@@ -53,7 +53,11 @@ export const ExpiryDashboard: React.FC = () => {
   const [completedItems, setCompletedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [dateFilterType, setDateFilterType] = useState<'issue' | 'expiry'>('expiry');
+  const [permitTypeFilter, setPermitTypeFilter] = useState<string>('all');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // Load data on component mount
   useEffect(() => {
@@ -159,30 +163,73 @@ export const ExpiryDashboard: React.FC = () => {
     };
   }, [zawilPermits]);
 
+  // Get unique permit types from zawil permits
+  const permitTypes = useMemo(() => {
+    const types = new Set(zawilPermits.map(p => p.permit_type));
+    return Array.from(types).sort();
+  }, [zawilPermits]);
+
   // Filter items based on search, status, and date filters
   const getFilteredItems = (items: ExtendedExpiryItem[]) => {
     return items.filter(item => {
-      const matchesSearch = !searchTerm || 
+      // Enhanced search: employee name, MOI number, or permit number
+      const matchesSearch = !searchTerm ||
         item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.documentNumber.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = filterStatus === 'all' || 
+        (item.moiNumber && item.moiNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.zawilPermitId && item.zawilPermitId.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      // Status filter: expired / expiring soon / active (valid)
+      const matchesStatus = filterStatus === 'all' ||
         (filterStatus === 'done' && item.isDone) ||
-        (filterStatus !== 'done' && !item.isDone && item.status === filterStatus);
-      
-      const matchesDateFrom = !dateFilter.from || item.expiryDate >= dateFilter.from;
-      const matchesDateTo = !dateFilter.to || item.expiryDate <= dateFilter.to;
-      
-      return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
+        (filterStatus === 'expired' && item.status === 'expired') ||
+        (filterStatus === 'expiring-soon' && item.status === 'expiring-soon') ||
+        (filterStatus === 'valid' && item.status === 'valid');
+
+      // Date range filter based on selected date type (issue or expiry)
+      const dateToCheck = dateFilterType === 'issue' ? item.issueDate : item.expiryDate;
+      const matchesDateFrom = !dateFilter.from || !dateToCheck || dateToCheck >= dateFilter.from;
+      const matchesDateTo = !dateFilter.to || !dateToCheck || dateToCheck <= dateFilter.to;
+
+      // Permit type filter (only for zawil permits)
+      const matchesPermitType = permitTypeFilter === 'all' ||
+        !item.permitType ||
+        item.permitType === permitTypeFilter;
+
+      return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo && matchesPermitType;
     });
   };
 
-  // Get current tab data
+  // Get current tab data with pagination
   const getCurrentTabData = () => {
     if (activeTab === 'overview') return [];
     const tabData = dashboardData[activeTab as keyof typeof dashboardData];
-    return getFilteredItems(tabData?.items || []);
+    const filteredItems = getFilteredItems(tabData?.items || []);
+
+    // Apply pagination
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredItems.slice(startIndex, endIndex);
   };
+
+  // Get total pages for pagination
+  const getTotalPages = () => {
+    if (activeTab === 'overview') return 0;
+    const tabData = dashboardData[activeTab as keyof typeof dashboardData];
+    const filteredItems = getFilteredItems(tabData?.items || []);
+    return Math.ceil(filteredItems.length / itemsPerPage);
+  };
+
+  // Get total filtered items count
+  const getFilteredItemsCount = () => {
+    if (activeTab === 'overview') return 0;
+    const tabData = dashboardData[activeTab as keyof typeof dashboardData];
+    return getFilteredItems(tabData?.items || []).length;
+  };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus, dateFilter, permitTypeFilter, activeTab, itemsPerPage]);
 
   // Handle mark as done
   const handleMarkAsDone = async (item: ZawilPermit) => {
@@ -452,42 +499,88 @@ export const ExpiryDashboard: React.FC = () => {
           </div>
 
           {/* Search and Filters */}
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="space-y-4">
+            {/* Search Bar */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search by employee name or document number..."
+                placeholder="Search by Employee Name, MOI/Iqama Number, or Permit Number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Status</option>
-              <option value="expired">Expired</option>
-              <option value="expiring-soon">Expiring Soon</option>
-              <option value="valid">Valid</option>
-              <option value="done">Completed</option>
-            </select>
-            <input
-              type="date"
-              value={dateFilter.from}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="From Date"
-            />
-            <input
-              type="date"
-              value={dateFilter.to}
-              onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="To Date"
-            />
+
+            {/* Filters Row */}
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Status Filter */}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Status</option>
+                <option value="expired">Expired</option>
+                <option value="expiring-soon">Expiring Soon</option>
+                <option value="valid">Active</option>
+              </select>
+
+              {/* Permit Type Filter (only for Zawil tab) */}
+              {activeTab === 'zawil' && (
+                <select
+                  value={permitTypeFilter}
+                  onChange={(e) => setPermitTypeFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">All Permit Types</option>
+                  {permitTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              )}
+
+              {/* Date Type Filter */}
+              <select
+                value={dateFilterType}
+                onChange={(e) => setDateFilterType(e.target.value as 'issue' | 'expiry')}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="expiry">Expiry Date</option>
+                <option value="issue">Issue Date</option>
+              </select>
+
+              {/* Date Range Filters */}
+              <input
+                type="date"
+                value={dateFilter.from}
+                onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="From Date"
+              />
+              <input
+                type="date"
+                value={dateFilter.to}
+                onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="To Date"
+              />
+
+              {/* Clear Filters Button */}
+              {(searchTerm || filterStatus !== 'all' || permitTypeFilter !== 'all' || dateFilter.from || dateFilter.to) && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterStatus('all');
+                    setPermitTypeFilter('all');
+                    setDateFilter({ from: '', to: '' });
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors whitespace-nowrap"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Bulk Actions */}
@@ -518,17 +611,34 @@ export const ExpiryDashboard: React.FC = () => {
 
         {/* Data Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900">
-              {filteredItems.length} {tabId} documents
-            </h3>
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export All
-            </button>
+          <div className="p-4 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                {getFilteredItemsCount()} {tabId} documents
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, getFilteredItemsCount())} of {getFilteredItemsCount()} results
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Items per page selector */}
+              <select
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                <option value={20}>20 per page</option>
+                <option value={50}>50 per page</option>
+                <option value={100}>100 per page</option>
+              </select>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Export All
+              </button>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -700,6 +810,78 @@ export const ExpiryDashboard: React.FC = () => {
             <div className="text-center py-8">
               <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">No documents found matching your criteria</p>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {getFilteredItemsCount() > 0 && getTotalPages() > 1 && (
+            <div className="p-4 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="text-sm text-gray-600">
+                Page {currentPage} of {getTotalPages()}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Previous
+                </button>
+
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, getTotalPages()) }, (_, i) => {
+                    let pageNum;
+                    const totalPages = getTotalPages();
+
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-2 border rounded-lg text-sm transition-colors ${
+                          currentPage === pageNum
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(getTotalPages(), prev + 1))}
+                  disabled={currentPage === getTotalPages()}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => setCurrentPage(getTotalPages())}
+                  disabled={currentPage === getTotalPages()}
+                  className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Last
+                </button>
+              </div>
             </div>
           )}
         </div>
