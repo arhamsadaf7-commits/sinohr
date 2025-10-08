@@ -67,6 +67,7 @@ export interface ZawilUploadResult {
   success: boolean;
   message: string;
   insertedCount: number;
+  updatedCount: number;
   skippedCount: number;
   errors: string[];
   uploadLogId?: number;

@@ -58,64 +58,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      // Use stored token to restore session
-      const mockUser: User = {
-        id: '1',
-        username: 'admin',
-        email: 'admin@company.com',
-        role: {
-          id: '1',
-          name: 'Super Admin',
-          description: 'Full system access',
-          permissions: [
-            { id: '1', module: 'HR', action: 'read', resource: 'employees' },
-            { id: '2', module: 'HR', action: 'write', resource: 'employees' },
-            { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
-            { id: '4', module: 'Security', action: 'read', resource: 'logs' },
-            { id: '5', module: 'Admin', action: 'write', resource: 'users' },
-          ],
-        },
-        permissions: [],
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      dispatch({ type: 'LOGIN_SUCCESS', payload: { user: mockUser, token } });
-    } else {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
-  }, []);
-
-  const login = async (credentials: LoginCredentials) => {
-    dispatch({ type: 'LOGIN_START' });
-    
-    try {
-      // Try Supabase authentication first
+    // Initialize Supabase session
+    const initializeAuth = async () => {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: credentials.email,
-          password: credentials.password,
-        });
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (error) throw error;
-        
-        if (data.user) {
-          // Handle Supabase user
-          const token = data.session?.access_token || 'supabase_token';
+        if (error) {
+          console.error('Error getting session:', error);
+          dispatch({ type: 'SET_LOADING', payload: false });
+          return;
+        }
+
+        if (session?.user) {
+          const token = session.access_token;
           localStorage.setItem('auth_token', token);
           
           const supabaseUser: User = {
-            id: data.user.id,
-            username: data.user.email?.split('@')[0] || 'user',
-            email: data.user.email || '',
+            id: session.user.id,
+            username: session.user.email?.split('@')[0] || 'user',
+            email: session.user.email || '',
             role: {
               id: '1',
-              name: 'User',
-              description: 'Standard user access',
+              name: 'Super Admin',
+              description: 'Full system access',
               permissions: [
                 { id: '1', module: 'HR', action: 'read', resource: 'employees' },
+                { id: '2', module: 'HR', action: 'write', resource: 'employees' },
+                { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
+                { id: '4', module: 'Security', action: 'read', resource: 'logs' },
+                { id: '5', module: 'Admin', action: 'write', resource: 'users' },
               ],
             },
             permissions: [],
@@ -126,20 +97,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           
           dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
-          return;
+        } else {
+          dispatch({ type: 'SET_LOADING', payload: false });
         }
-      } catch (supabaseError) {
-        console.log('Supabase auth failed, trying mock auth:', supabaseError);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        dispatch({ type: 'SET_LOADING', payload: false });
       }
-      
-      // Fallback to mock authentication
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+    };
+
+    initializeAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const token = session.access_token;
+          localStorage.setItem('auth_token', token);
+          
+          const supabaseUser: User = {
+            id: session.user.id,
+            username: session.user.email?.split('@')[0] || 'user',
+            email: session.user.email || '',
+            role: {
+              id: '1',
+              name: 'Super Admin',
+              description: 'Full system access',
+              permissions: [
+                { id: '1', module: 'HR', action: 'read', resource: 'employees' },
+                { id: '2', module: 'HR', action: 'write', resource: 'employees' },
+                { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
+                { id: '4', module: 'Security', action: 'read', resource: 'logs' },
+                { id: '5', module: 'Admin', action: 'write', resource: 'users' },
+              ],
+            },
+            permissions: [],
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastLogin: new Date().toISOString(),
+          };
+          
+          dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
+        } else if (event === 'SIGNED_OUT') {
+          localStorage.removeItem('auth_token');
+          dispatch({ type: 'LOGOUT' });
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (credentials: LoginCredentials) => {
+    dispatch({ type: 'LOGIN_START' });
+    
+    try {
+      // Check if we're using demo credentials and Supabase is not properly configured
       if (credentials.email === 'admin@company.com' && credentials.password === 'admin123') {
+        // Create a mock user for demo purposes
         const mockUser: User = {
-          id: '1',
+          id: 'demo-admin-id',
           username: 'admin',
-          email: credentials.email,
+          email: 'admin@company.com',
           role: {
             id: '1',
             name: 'Super Admin',
@@ -159,11 +179,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastLogin: new Date().toISOString(),
         };
         
-        const token = 'mock_jwt_token_' + Date.now();
+        const mockToken = 'demo-token-' + Date.now();
+        localStorage.setItem('auth_token', mockToken);
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user: mockUser, token: mockToken } });
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
+      });
+      
+      if (error) {
+        // If Supabase auth fails, provide helpful error message
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Invalid email or password. For demo access, use: admin@company.com / admin123');
+        }
+        throw new Error(error.message);
+      }
+      
+      if (data.user && data.session) {
+        const token = data.session.access_token;
         localStorage.setItem('auth_token', token);
-        dispatch({ type: 'LOGIN_SUCCESS', payload: { user: mockUser, token } });
+        
+        const supabaseUser: User = {
+          id: data.user.id,
+          username: data.user.email?.split('@')[0] || 'user',
+          email: data.user.email || '',
+          role: {
+            id: '1',
+            name: 'Super Admin',
+            description: 'Full system access',
+            permissions: [
+              { id: '1', module: 'HR', action: 'read', resource: 'employees' },
+              { id: '2', module: 'HR', action: 'write', resource: 'employees' },
+              { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
+              { id: '4', module: 'Security', action: 'read', resource: 'logs' },
+              { id: '5', module: 'Admin', action: 'write', resource: 'users' },
+            ],
+          },
+          permissions: [],
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString(),
+        };
+        
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
       } else {
-        throw new Error('Invalid credentials. Use admin@company.com / admin123 for demo.');
+        throw new Error('Login failed - no user data received');
       }
     } catch (error) {
       dispatch({ type: 'LOGIN_FAILURE' });
@@ -172,32 +236,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (data: SignupData) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
     if (data.password !== data.confirmPassword) {
       throw new Error('Passwords do not match');
     }
     
-    // In a real app, this would create a new user
-    console.log('User created:', data);
+    const { error } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: {
+        data: {
+          username: data.username,
+        }
+      }
+    });
+    
+    if (error) {
+      throw new Error(error.message);
+    }
   };
 
   const logout = () => {
     localStorage.removeItem('auth_token');
-    supabase.auth.signOut(); // Also sign out from Supabase
+    supabase.auth.signOut();
     dispatch({ type: 'LOGOUT' });
   };
 
   const resetPassword = async (email: string) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    console.log('Password reset email sent to:', email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    
+    if (error) {
+      throw new Error(error.message);
+    }
   };
 
   const updateProfile = async (data: Partial<User>) => {
-    // Simulate profile update
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const { error } = await supabase.auth.updateUser({
+      email: data.email,
+      data: {
+        username: data.username,
+      }
+    });
+    
+    if (error) {
+      throw new Error(error.message);
+    }
     
     if (state.user) {
       const updatedUser = { ...state.user, ...data, updatedAt: new Date().toISOString() };

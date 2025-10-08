@@ -1,32 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ZawilService } from '../../services/zawilService';
 import { ZawilPermit, UploadLog } from '../../types/zawil';
-import { 
-  Calendar, 
-  AlertTriangle, 
-  Clock, 
-  CheckCircle, 
-  Search, 
-  Filter,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  CreditCard,
-  Shield,
-  Car,
-  Eye,
-  Edit,
-  Check,
-  Download,
-  X,
-  User,
-  Phone,
-  Mail,
-  Building,
-  MapPin,
-  Archive,
-  Loader2
-} from 'lucide-react';
+import { Calendar, AlertTriangle, Clock, CheckCircle, Search, Filter, ChevronDown, ChevronUp, FileText, CreditCard, Shield, Car, Eye, CreditCard as Edit, Check, Download, X, User, Phone, Mail, Building, MapPin, Archive, Loader2 } from 'lucide-react';
 import { ExpiryItem, ExpiryStats } from '../../types/auth';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -78,10 +53,35 @@ export const ExpiryDashboard: React.FC = () => {
   const [completedItems, setCompletedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Load data on component mount
   useEffect(() => {
     loadData();
+  }, [refreshTrigger]);
+
+  // Listen for data changes from uploads
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'zawil_data_updated') {
+        setRefreshTrigger(prev => prev + 1);
+        localStorage.removeItem('zawil_data_updated');
+      }
+    };
+
+    const handleCustomEvent = (e: CustomEvent) => {
+      if (e.detail === 'zawil_data_updated') {
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('zawil_data_updated' as any, handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('zawil_data_updated' as any, handleCustomEvent);
+    };
   }, []);
 
   const loadData = async () => {
@@ -94,7 +94,6 @@ export const ExpiryDashboard: React.FC = () => {
       setZawilPermits(permits);
       setUploadHistory(history);
     } catch (error) {
-      console.error('Error loading data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
@@ -539,10 +538,10 @@ export const ExpiryDashboard: React.FC = () => {
                   <th className="px-4 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={currentData.length > 0 && selectedItems.size === currentData.length}
+                     checked={filteredItems.length > 0 && selectedItems.size === filteredItems.length}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedItems(new Set(currentData.map(item => item.id)));
+                         setSelectedItems(new Set(filteredItems.map(item => item.id)));
                         } else {
                           setSelectedItems(new Set());
                         }
