@@ -8,7 +8,11 @@ import { UserManagement } from './UserManagement';
 import { PermitRequestsPage } from './PermitRequestsPage';
 import { ZawilUploader } from '../ZawilUploader/ZawilUploader';
 import { ZawilExcelUploader } from '../ZawilUploader/ZawilExcelUploader';
+import { UserManagementPage } from './Settings/UserManagementPage';
+import { ModulePermissionsPage } from './Settings/ModulePermissionsPage';
+import { SystemConfigPage } from './Settings/SystemConfigPage';
 import { EmployeeProvider } from '../../context/EmployeeContext';
+import { Toaster } from 'react-hot-toast';
 
 interface AdminAppProps {
   onBackToDashboard?: () => void;
@@ -68,6 +72,12 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
             </div>
           </div>
         );
+      case 'settings-users':
+        return <UserManagementPage />;
+      case 'settings-permissions':
+        return <ModulePermissionsPage />;
+      case 'settings-config':
+        return <SystemConfigPage />;
       case 'settings':
         return (
           <div className="p-8 bg-gray-50 min-h-screen">
@@ -75,7 +85,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
               <p className="text-gray-600 mb-8">System configuration and preferences</p>
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-                <p className="text-gray-500">Settings panel coming soon...</p>
+                <p className="text-gray-500">Please select a settings section from the menu</p>
               </div>
             </div>
           </div>
@@ -87,10 +97,34 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
 
   return (
     <EmployeeProvider>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            duration: 4000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
       <div className="flex h-screen bg-gray-50">
         <div className="w-64 flex-shrink-0">
-          <AdminNavigation 
-            activePage={activePage} 
+          <AdminNavigation
+            activePage={activePage}
             onPageChange={setActivePage}
             onBackToDashboard={handleBackToDashboard}
           />

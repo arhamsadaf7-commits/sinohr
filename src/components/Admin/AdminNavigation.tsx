@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +11,12 @@ import {
   ArrowLeft,
   FileText,
   Upload,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronDown,
+  ChevronRight,
+  UserCog,
+  Lock,
+  Cog
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -29,15 +34,21 @@ const navigationItems = [
   { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR' },
   { id: 'profile', label: 'Profile', icon: User, permission: null },
   { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR' },
-  { id: 'settings', label: 'Settings', icon: Settings, permission: 'Admin' },
 ];
 
-export const AdminNavigation: React.FC<AdminNavigationProps> = ({ 
-  activePage, 
+const settingsSubmenuItems = [
+  { id: 'settings-users', label: 'User Management', icon: UserCog, permission: 'Admin' },
+  { id: 'settings-permissions', label: 'Module Permissions', icon: Lock, permission: 'Admin' },
+  { id: 'settings-config', label: 'System Config', icon: Cog, permission: 'Admin' },
+];
+
+export const AdminNavigation: React.FC<AdminNavigationProps> = ({
+  activePage,
   onPageChange,
   onBackToDashboard
 }) => {
   const { state, logout, checkPermission } = useAuth();
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -101,17 +112,17 @@ export const AdminNavigation: React.FC<AdminNavigationProps> = ({
             const Icon = item.icon;
             const isActive = activePage === item.id;
             const hasPermission = !item.permission || checkPermission(item.permission, 'read');
-            
+
             if (!hasPermission) return null;
-            
+
             return (
               <li key={item.id}>
                 <button
                   onClick={() => onPageChange(item.id)}
                   className={`
                     w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-all duration-200
-                    ${isActive 
-                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600' 
+                    ${isActive
+                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                     }
                   `}
@@ -122,6 +133,59 @@ export const AdminNavigation: React.FC<AdminNavigationProps> = ({
               </li>
             );
           })}
+
+          {checkPermission('Admin', 'read') && (
+            <li>
+              <button
+                onClick={() => setSettingsExpanded(!settingsExpanded)}
+                className={`
+                  w-full flex items-center gap-3 px-4 py-3 text-left rounded-lg transition-all duration-200
+                  ${activePage.startsWith('settings-')
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }
+                `}
+              >
+                <Settings className={`w-5 h-5 ${activePage.startsWith('settings-') ? 'text-blue-600' : 'text-gray-500'}`} />
+                <span className="font-medium flex-1">Settings</span>
+                {settingsExpanded ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+
+              {settingsExpanded && (
+                <ul className="mt-2 ml-4 space-y-1">
+                  {settingsSubmenuItems.map((subItem) => {
+                    const SubIcon = subItem.icon;
+                    const isActive = activePage === subItem.id;
+                    const hasPermission = !subItem.permission || checkPermission(subItem.permission, 'read');
+
+                    if (!hasPermission) return null;
+
+                    return (
+                      <li key={subItem.id}>
+                        <button
+                          onClick={() => onPageChange(subItem.id)}
+                          className={`
+                            w-full flex items-center gap-3 px-4 py-2 text-left rounded-lg transition-all duration-200 text-sm
+                            ${isActive
+                              ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            }
+                          `}
+                        >
+                          <SubIcon className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-gray-500'}`} />
+                          <span className="font-medium">{subItem.label}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          )}
         </ul>
         
         <div className="mt-8 pt-6 border-t border-gray-200">

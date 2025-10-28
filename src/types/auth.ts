@@ -10,6 +10,10 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLogin?: string;
+  user_type?: 'Admin' | 'Admin Assistant' | 'Manager' | 'Employee' | 'Supplier' | 'Viewer';
+  employee_id?: number;
+  phone?: string;
+  source?: 'Manual' | 'Employee' | 'Supplier';
 }
 
 export interface UserRole {
