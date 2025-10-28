@@ -1,14 +1,15 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Calendar, 
-  User, 
+import {
+  LayoutDashboard,
+  Users,
+  Calendar,
+  User,
   LogOut,
   Shield,
   Settings,
   Bell,
-  ArrowLeft
+  ArrowLeft,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -21,6 +22,7 @@ interface AdminNavigationProps {
 const navigationItems = [
   { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'HR' },
   { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin' },
+  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'HR' },
   { id: 'profile', label: 'Profile', icon: User, permission: null },
   { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR' },
   { id: 'settings', label: 'Settings', icon: Settings, permission: 'Admin' },

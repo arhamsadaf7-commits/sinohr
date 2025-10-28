@@ -18,6 +18,7 @@ import { EmergencyContactPage } from './components/EmergencyContactPage';
 import { SkillsPage } from './components/SkillsPage';
 import { ZawilUploader } from './components/ZawilUploader/ZawilUploader';
 import { ZawilExcelUploader } from './components/ZawilUploader/ZawilExcelUploader';
+import { PublicPermitRequestForm } from './components/PublicPermitRequestForm';
 import { Toaster } from 'react-hot-toast';
 
 function App() {
@@ -27,27 +28,28 @@ function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   useEffect(() => {
-    // Check if we should show admin panel from URL
-    const checkAdminPanel = () => {
-      const isAdminPanel = window.location.pathname === '/admin' || 
-                          window.location.hash === '#admin' ||
-                          window.location.search.includes('admin=true');
-      setShowAdminPanel(isAdminPanel);
+    const checkRouting = () => {
+      const path = window.location.pathname;
+
+      if (path === '/public/permit-request') {
+        setActivePage('public-permit-form');
+      } else if (path === '/admin' || window.location.hash === '#admin' || window.location.search.includes('admin=true')) {
+        setShowAdminPanel(true);
+      }
     };
-    
-    checkAdminPanel();
-    
-    // Listen for URL changes
+
+    checkRouting();
+
     const handlePopState = () => {
-      checkAdminPanel();
+      checkRouting();
     };
-    
+
     window.addEventListener('popstate', handlePopState);
-    window.addEventListener('hashchange', checkAdminPanel);
-    
+    window.addEventListener('hashchange', checkRouting);
+
     return () => {
       window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('hashchange', checkAdminPanel);
+      window.removeEventListener('hashchange', checkRouting);
     };
   }, []);
 
@@ -65,6 +67,15 @@ function App() {
     // Update URL without triggering logout
     window.history.pushState({}, '', '/');
   };
+
+  if (activePage === 'public-permit-form') {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <PublicPermitRequestForm />
+      </>
+    );
+  }
 
   if (showAdminPanel) {
     return <AdminApp onBackToDashboard={handleBackToDashboard} />;

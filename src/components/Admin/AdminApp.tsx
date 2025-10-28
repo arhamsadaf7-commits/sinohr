@@ -5,6 +5,7 @@ import { AdminNavigation } from './AdminNavigation';
 import { AdminProfile } from './AdminProfile';
 import { ExpiryDashboard } from './ExpiryDashboard';
 import { UserManagement } from './UserManagement';
+import { PermitRequestsPage } from './PermitRequestsPage';
 import { EmployeeProvider } from '../../context/EmployeeContext';
 
 interface AdminAppProps {
@@ -45,6 +46,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
         return <ExpiryDashboard />;
       case 'user-management':
         return <UserManagement />;
+      case 'permit-requests':
+        return <PermitRequestsPage />;
       case 'profile':
         return <AdminProfile />;
       case 'notifications':
