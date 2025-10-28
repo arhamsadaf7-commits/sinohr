@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building, User, Briefcase, FileText, Phone, Award, BarChart3, Grid3X3, TrendingUp, LogOut, Search, Shield, Upload } from 'lucide-react';
+import { Building, User, Briefcase, FileText, Phone, Award, BarChart3, Grid3X3, TrendingUp, LogOut, Search, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface NavigationProps {
@@ -20,8 +20,6 @@ const navigationItems = [
   { id: 'documents', label: 'Documents', icon: Award },
   { id: 'emergency', label: 'Emergency Contacts', icon: Phone },
   { id: 'skills', label: 'Skills & Experience', icon: Award },
-  { id: 'zawil-uploader', label: 'Zawil PDF Uploader', icon: Upload },
-  { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: Upload },
 ];
 
 export const Navigation: React.FC<NavigationProps> = ({ activePage, onPageChange, onLogout }) => {

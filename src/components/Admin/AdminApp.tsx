@@ -6,6 +6,8 @@ import { AdminProfile } from './AdminProfile';
 import { ExpiryDashboard } from './ExpiryDashboard';
 import { UserManagement } from './UserManagement';
 import { PermitRequestsPage } from './PermitRequestsPage';
+import { ZawilUploader } from '../ZawilUploader/ZawilUploader';
+import { ZawilExcelUploader } from '../ZawilUploader/ZawilExcelUploader';
 import { EmployeeProvider } from '../../context/EmployeeContext';
 
 interface AdminAppProps {
@@ -48,6 +50,10 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
         return <UserManagement />;
       case 'permit-requests':
         return <PermitRequestsPage />;
+      case 'zawil-pdf-uploader':
+        return <ZawilUploader />;
+      case 'zawil-excel-uploader':
+        return <ZawilExcelUploader />;
       case 'profile':
         return <AdminProfile />;
       case 'notifications':

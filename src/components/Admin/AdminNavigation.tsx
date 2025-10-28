@@ -9,7 +9,9 @@ import {
   Settings,
   Bell,
   ArrowLeft,
-  FileText
+  FileText,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -23,6 +25,8 @@ const navigationItems = [
   { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'HR' },
   { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin' },
   { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'HR' },
+  { id: 'zawil-pdf-uploader', label: 'Zawil PDF Uploader', icon: Upload, permission: 'HR' },
+  { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR' },
   { id: 'profile', label: 'Profile', icon: User, permission: null },
   { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR' },
   { id: 'settings', label: 'Settings', icon: Settings, permission: 'Admin' },

@@ -16,8 +16,6 @@ import { JobInfoPage } from './components/JobInfoPage';
 import { DocumentsPage } from './components/DocumentsPage';
 import { EmergencyContactPage } from './components/EmergencyContactPage';
 import { SkillsPage } from './components/SkillsPage';
-import { ZawilUploader } from './components/ZawilUploader/ZawilUploader';
-import { ZawilExcelUploader } from './components/ZawilUploader/ZawilExcelUploader';
 import { PublicPermitRequestForm } from './components/PublicPermitRequestForm';
 import { Toaster } from 'react-hot-toast';
 
@@ -120,10 +118,6 @@ function App() {
         return <EmergencyContactPage />;
       case 'skills':
         return <SkillsPage />;
-      case 'zawil-uploader':
-        return <ZawilUploader />;
-      case 'zawil-excel-uploader':
-        return <ZawilExcelUploader />;
       default:
         return <Dashboard />;
     }
