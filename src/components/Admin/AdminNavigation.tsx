@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -48,7 +48,13 @@ export const AdminNavigation: React.FC<AdminNavigationProps> = ({
   onBackToDashboard
 }) => {
   const { state, logout, checkPermission } = useAuth();
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(activePage.startsWith('settings-'));
+
+  useEffect(() => {
+    if (activePage.startsWith('settings-')) {
+      setSettingsExpanded(true);
+    }
+  }, [activePage]);
 
   const handleLogout = () => {
     logout();
