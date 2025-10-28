@@ -62,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initializeAuth = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           console.error('Error getting session:', error);
           dispatch({ type: 'SET_LOADING', payload: false });
@@ -72,30 +72,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user) {
           const token = session.access_token;
           localStorage.setItem('auth_token', token);
-          
+
+          // Fetch user data from database with role and permissions
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select(`
+              *,
+              role:roles (
+                id,
+                name,
+                description
+              )
+            `)
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (userError || !userData) {
+            console.error('Error fetching user data:', userError);
+            dispatch({ type: 'SET_LOADING', payload: false });
+            return;
+          }
+
+          // Fetch role permissions
+          const { data: rolePermissions, error: permError } = await supabase
+            .from('permissions')
+            .select(`
+              *,
+              module:modules (
+                id,
+                name
+              )
+            `)
+            .eq('role_id', userData.role_id);
+
+          if (permError) {
+            console.error('Error fetching permissions:', permError);
+          }
+
+          // Convert to User type
+          const permissions = (rolePermissions || []).flatMap(p => {
+            const actions = [];
+            if (p.can_read) actions.push({ id: `${p.id}-read`, module: p.module.name, action: 'read', resource: p.module.name });
+            if (p.can_create) actions.push({ id: `${p.id}-create`, module: p.module.name, action: 'create', resource: p.module.name });
+            if (p.can_update) actions.push({ id: `${p.id}-update`, module: p.module.name, action: 'update', resource: p.module.name });
+            if (p.can_delete) actions.push({ id: `${p.id}-delete`, module: p.module.name, action: 'delete', resource: p.module.name });
+            return actions;
+          });
+
           const supabaseUser: User = {
             id: session.user.id,
-            username: session.user.email?.split('@')[0] || 'user',
+            username: userData.full_name || session.user.email?.split('@')[0] || 'user',
             email: session.user.email || '',
             role: {
-              id: '1',
-              name: 'Super Admin',
-              description: 'Full system access',
-              permissions: [
-                { id: '1', module: 'HR', action: 'read', resource: 'employees' },
-                { id: '2', module: 'HR', action: 'write', resource: 'employees' },
-                { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
-                { id: '4', module: 'Security', action: 'read', resource: 'logs' },
-                { id: '5', module: 'Admin', action: 'write', resource: 'users' },
-              ],
+              id: String(userData.role.id),
+              name: userData.role.name,
+              description: userData.role.description || '',
+              permissions: permissions,
             },
             permissions: [],
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            isActive: userData.is_active,
+            createdAt: userData.created_at,
+            updatedAt: userData.updated_at,
             lastLogin: new Date().toISOString(),
           };
-          
+
           dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
         } else {
           dispatch({ type: 'SET_LOADING', payload: false });
@@ -110,39 +150,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          const token = session.access_token;
-          localStorage.setItem('auth_token', token);
-          
-          const supabaseUser: User = {
-            id: session.user.id,
-            username: session.user.email?.split('@')[0] || 'user',
-            email: session.user.email || '',
-            role: {
-              id: '1',
-              name: 'Super Admin',
-              description: 'Full system access',
-              permissions: [
-                { id: '1', module: 'HR', action: 'read', resource: 'employees' },
-                { id: '2', module: 'HR', action: 'write', resource: 'employees' },
-                { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
-                { id: '4', module: 'Security', action: 'read', resource: 'logs' },
-                { id: '5', module: 'Admin', action: 'write', resource: 'users' },
-              ],
-            },
-            permissions: [],
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            lastLogin: new Date().toISOString(),
-          };
-          
-          dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
-        } else if (event === 'SIGNED_OUT') {
-          localStorage.removeItem('auth_token');
-          dispatch({ type: 'LOGOUT' });
-        }
+      (event, session) => {
+        (async () => {
+          if (event === 'SIGNED_IN' && session?.user) {
+            const token = session.access_token;
+            localStorage.setItem('auth_token', token);
+
+            // Fetch user data from database
+            const { data: userData } = await supabase
+              .from('users')
+              .select(`
+                *,
+                role:roles (
+                  id,
+                  name,
+                  description
+                )
+              `)
+              .eq('id', session.user.id)
+              .maybeSingle();
+
+            if (userData) {
+              // Fetch role permissions
+              const { data: rolePermissions } = await supabase
+                .from('permissions')
+                .select(`
+                  *,
+                  module:modules (
+                    id,
+                    name
+                  )
+                `)
+                .eq('role_id', userData.role_id);
+
+              const permissions = (rolePermissions || []).flatMap(p => {
+                const actions = [];
+                if (p.can_read) actions.push({ id: `${p.id}-read`, module: p.module.name, action: 'read', resource: p.module.name });
+                if (p.can_create) actions.push({ id: `${p.id}-create`, module: p.module.name, action: 'create', resource: p.module.name });
+                if (p.can_update) actions.push({ id: `${p.id}-update`, module: p.module.name, action: 'update', resource: p.module.name });
+                if (p.can_delete) actions.push({ id: `${p.id}-delete`, module: p.module.name, action: 'delete', resource: p.module.name });
+                return actions;
+              });
+
+              const supabaseUser: User = {
+                id: session.user.id,
+                username: userData.full_name || session.user.email?.split('@')[0] || 'user',
+                email: session.user.email || '',
+                role: {
+                  id: String(userData.role.id),
+                  name: userData.role.name,
+                  description: userData.role.description || '',
+                  permissions: permissions,
+                },
+                permissions: [],
+                isActive: userData.is_active,
+                createdAt: userData.created_at,
+                updatedAt: userData.updated_at,
+                lastLogin: new Date().toISOString(),
+              };
+
+              dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
+            }
+          } else if (event === 'SIGNED_OUT') {
+            localStorage.removeItem('auth_token');
+            dispatch({ type: 'LOGOUT' });
+          }
+        })();
       }
     );
 
@@ -201,30 +274,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user && data.session) {
         const token = data.session.access_token;
         localStorage.setItem('auth_token', token);
-        
+
+        // Fetch user data from database
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select(`
+            *,
+            role:roles (
+              id,
+              name,
+              description
+            )
+          `)
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (userError || !userData) {
+          throw new Error('Failed to fetch user data');
+        }
+
+        // Fetch role permissions
+        const { data: rolePermissions } = await supabase
+          .from('permissions')
+          .select(`
+            *,
+            module:modules (
+              id,
+              name
+            )
+          `)
+          .eq('role_id', userData.role_id);
+
+        const permissions = (rolePermissions || []).flatMap(p => {
+          const actions = [];
+          if (p.can_read) actions.push({ id: `${p.id}-read`, module: p.module.name, action: 'read', resource: p.module.name });
+          if (p.can_create) actions.push({ id: `${p.id}-create`, module: p.module.name, action: 'create', resource: p.module.name });
+          if (p.can_update) actions.push({ id: `${p.id}-update`, module: p.module.name, action: 'update', resource: p.module.name });
+          if (p.can_delete) actions.push({ id: `${p.id}-delete`, module: p.module.name, action: 'delete', resource: p.module.name });
+          return actions;
+        });
+
         const supabaseUser: User = {
           id: data.user.id,
-          username: data.user.email?.split('@')[0] || 'user',
+          username: userData.full_name || data.user.email?.split('@')[0] || 'user',
           email: data.user.email || '',
           role: {
-            id: '1',
-            name: 'Super Admin',
-            description: 'Full system access',
-            permissions: [
-              { id: '1', module: 'HR', action: 'read', resource: 'employees' },
-              { id: '2', module: 'HR', action: 'write', resource: 'employees' },
-              { id: '3', module: 'Finance', action: 'read', resource: 'reports' },
-              { id: '4', module: 'Security', action: 'read', resource: 'logs' },
-              { id: '5', module: 'Admin', action: 'write', resource: 'users' },
-            ],
+            id: String(userData.role.id),
+            name: userData.role.name,
+            description: userData.role.description || '',
+            permissions: permissions,
           },
           permissions: [],
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          isActive: userData.is_active,
+          createdAt: userData.created_at,
+          updatedAt: userData.updated_at,
           lastLogin: new Date().toISOString(),
         };
-        
+
         dispatch({ type: 'LOGIN_SUCCESS', payload: { user: supabaseUser, token } });
       } else {
         throw new Error('Login failed - no user data received');
