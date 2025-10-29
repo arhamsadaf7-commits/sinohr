@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Eye, Check, X, FileText, Search, Filter } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 interface PermitRequest {
@@ -25,7 +26,9 @@ interface PermitRequest {
 }
 
 export const PermitRequestsPage: React.FC = () => {
+  const { state } = useAuth();
   const [requests, setRequests] = useState<PermitRequest[]>([]);
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<PermitRequest | null>(null);
@@ -33,6 +36,7 @@ export const PermitRequestsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [issuedForFilter, setIssuedForFilter] = useState<string>('ALL');
+  const [userFilter, setUserFilter] = useState<string>('ALL');
   const [uploadingImage, setUploadingImage] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -52,11 +56,15 @@ export const PermitRequestsPage: React.FC = () => {
 
   useEffect(() => {
     fetchRequests();
+    fetchUsers();
   }, []);
 
   const fetchRequests = async () => {
     try {
       setLoading(true);
+
+      // RLS policies will automatically filter based on user role
+      // Admins see all, others see only their own
       const { data, error } = await supabase
         .from('zawil_permit_requests')
         .select('*')
@@ -69,6 +77,21 @@ export const PermitRequestsPage: React.FC = () => {
       console.error(error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, full_name')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error('Failed to load users:', error);
     }
   };
 
@@ -121,7 +144,8 @@ export const PermitRequestsPage: React.FC = () => {
           .from('zawil_permit_requests')
           .insert([{
             ...formData,
-            is_public_submission: false
+            is_public_submission: false,
+            created_by_user_id: state.user?.id
           }]);
 
         if (error) throw error;
@@ -175,12 +199,21 @@ export const PermitRequestsPage: React.FC = () => {
 
   const handleStatusUpdate = async (requestId: number, newStatus: 'APPROVED' | 'REJECTED') => {
     try {
+      // Get current user role
+      const userRole = state.user?.role.name;
+
+      // Only Admin and Admin Assistant can approve/reject
+      if (!userRole || !['Admin', 'Admin Assistant'].includes(userRole)) {
+        toast.error('Only Admins can approve or reject requests');
+        return;
+      }
+
       const { error } = await supabase
         .from('zawil_permit_requests')
         .update({
           status: newStatus,
           reviewed_at: new Date().toISOString(),
-          reviewed_by: 'Admin',
+          reviewed_by: state.user?.username || 'Admin',
           updated_at: new Date().toISOString()
         })
         .eq('request_id', requestId);
@@ -221,8 +254,9 @@ export const PermitRequestsPage: React.FC = () => {
 
     const matchesStatus = statusFilter === 'ALL' || request.status === statusFilter;
     const matchesIssuedFor = issuedForFilter === 'ALL' || request.issued_for === issuedForFilter;
+    const matchesUser = userFilter === 'ALL' || request.submitted_by === userFilter || (request as any).created_by_user_id === userFilter;
 
-    return matchesSearch && matchesStatus && matchesIssuedFor;
+    return matchesSearch && matchesStatus && matchesIssuedFor && matchesUser;
   });
 
   const getStatusBadge = (status: string) => {
@@ -290,7 +324,7 @@ export const PermitRequestsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -311,6 +345,19 @@ export const PermitRequestsPage: React.FC = () => {
                 <option value="VISITOR">Visitor</option>
                 <option value="PERMANENT">Permanent</option>
                 <option value="VEHICLE">Vehicle</option>
+              </select>
+
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ALL">All Users</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>
+                    {user.full_name}
+                  </option>
+                ))}
               </select>
 
               <button

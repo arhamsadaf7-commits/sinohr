@@ -27,13 +27,13 @@ interface AdminNavigationProps {
 }
 
 const navigationItems = [
-  { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'HR' },
-  { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin' },
-  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'HR' },
-  { id: 'zawil-pdf-uploader', label: 'Zawil PDF Uploader', icon: Upload, permission: 'HR' },
-  { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR' },
-  { id: 'profile', label: 'Profile', icon: User, permission: null },
-  { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR' },
+  { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'HR', hideForRoles: [] },
+  { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin', hideForRoles: [] },
+  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'HR', hideForRoles: ['Supplier'] },
+  { id: 'zawil-pdf-uploader', label: 'Zawil PDF Uploader', icon: Upload, permission: 'HR', hideForRoles: [] },
+  { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR', hideForRoles: [] },
+  { id: 'profile', label: 'Profile', icon: User, permission: null, hideForRoles: [] },
+  { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR', hideForRoles: [] },
 ];
 
 const settingsSubmenuItems = [
@@ -118,8 +118,10 @@ export const AdminNavigation: React.FC<AdminNavigationProps> = ({
             const Icon = item.icon;
             const isActive = activePage === item.id;
             const hasPermission = !item.permission || checkPermission(item.permission, 'read');
+            const userRole = state.user?.role.name;
+            const isHiddenForRole = userRole && item.hideForRoles.includes(userRole);
 
-            if (!hasPermission) return null;
+            if (!hasPermission || isHiddenForRole) return null;
 
             return (
               <li key={item.id}>

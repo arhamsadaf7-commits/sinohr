@@ -8,6 +8,7 @@ import { ReportsPage } from './components/Reports/ReportsPage';
 import { EmployeeProvider } from './context/EmployeeContext';
 import { Navigation } from './components/Navigation';
 import { Dashboard } from './components/Dashboard';
+import { SupplierDashboard } from './components/Dashboard/SupplierDashboard';
 import { EmployeeSearchPage } from './components/Search/EmployeeSearchPage';
 import { AdminApp } from './components/Admin/AdminApp';
 import { CompanyPage } from './components/CompanyPage';
@@ -95,9 +96,11 @@ function App() {
   }
 
   const renderPage = () => {
+    const isSupplier = authState.user?.role.name === 'Supplier';
+
     switch (activePage) {
       case 'dashboard':
-        return <Dashboard setActivePage={setActivePage} />;
+        return isSupplier ? <SupplierDashboard setActivePage={setActivePage} /> : <Dashboard setActivePage={setActivePage} />;
       case 'search':
         return <EmployeeSearchPage />;
       case 'analytics':
@@ -119,7 +122,7 @@ function App() {
       case 'skills':
         return <SkillsPage />;
       default:
-        return <Dashboard />;
+        return isSupplier ? <SupplierDashboard /> : <Dashboard />;
     }
   };
 
