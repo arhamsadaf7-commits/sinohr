@@ -330,40 +330,57 @@ export const ModulePermissionsPage: React.FC = () => {
               </>
             ) : (
               <>
-                <div className="mb-6 flex justify-between items-center">
-                  <div className="flex-1 max-w-md">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Select User</label>
-                    <select
-                      value={selectedUser || ''}
-                      onChange={(e) => setSelectedUser(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Choose a user</option>
-                      {users.map(user => (
-                        <option key={user.id} value={user.id}>
-                          {user.full_name} ({user.email})
-                        </option>
-                      ))}
-                    </select>
+                <div className="mb-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1 max-w-md">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Select User</label>
+                      <select
+                        value={selectedUser || ''}
+                        onChange={(e) => setSelectedUser(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Choose a user</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.full_name} - {user.role?.name}
+                          </option>
+                        ))}
+                      </select>
+                      {selectedUser && (
+                        <p className="text-sm text-gray-600 mt-2">
+                          Role: {users.find(u => u.id === selectedUser)?.role?.name}
+                        </p>
+                      )}
+                    </div>
+                    {selectedUser && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleResetUserPermissions}
+                          className="flex items-center gap-2 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Reset to Role
+                        </button>
+                        <button
+                          onClick={handleSaveUserPermissions}
+                          disabled={saving}
+                          className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          <Save className="w-4 h-4" />
+                          {saving ? 'Saving...' : 'Save Overrides'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleResetUserPermissions}
-                      disabled={!selectedUser || saving}
-                      className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Reset to Role
-                    </button>
-                    <button
-                      onClick={handleSaveUserPermissions}
-                      disabled={!selectedUser || saving}
-                      className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                      <Save className="w-4 h-4" />
-                      {saving ? 'Saving...' : 'Save Permissions'}
-                    </button>
-                  </div>
+
+                  {selectedUser && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-blue-900">
+                        <strong>Note:</strong> Green checkboxes show permissions inherited from the user's role.
+                        Blue checkboxes show user-specific overrides. Toggle "Override" to customize permissions for this user.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {selectedUser && (
@@ -372,11 +389,11 @@ export const ModulePermissionsPage: React.FC = () => {
                       <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
                           <th className="text-left py-3 px-4 font-medium text-gray-700">Module</th>
+                          <th className="text-center py-3 px-4 font-medium text-gray-700">Override</th>
                           <th className="text-center py-3 px-4 font-medium text-gray-700">Create</th>
                           <th className="text-center py-3 px-4 font-medium text-gray-700">Read</th>
                           <th className="text-center py-3 px-4 font-medium text-gray-700">Update</th>
                           <th className="text-center py-3 px-4 font-medium text-gray-700">Delete</th>
-                          <th className="text-center py-3 px-4 font-medium text-gray-700">Override</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -393,12 +410,26 @@ export const ModulePermissionsPage: React.FC = () => {
                                 </div>
                               </td>
                               <td className="py-3 px-4 text-center">
+                                <button
+                                  onClick={() => handleToggleInheritance(module.id)}
+                                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                                    perms.is_override
+                                      ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                      : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {perms.is_override ? 'Custom' : 'Inherited'}
+                                </button>
+                              </td>
+                              <td className="py-3 px-4 text-center">
                                 <input
                                   type="checkbox"
                                   checked={perms.can_create}
                                   onChange={(e) => handleUserPermissionChange(module.id, 'can_create', e.target.checked)}
                                   disabled={!perms.is_override}
-                                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+                                  className={`h-5 w-5 border-gray-300 rounded ${
+                                    perms.is_override ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600'
+                                  }`}
                                 />
                               </td>
                               <td className="py-3 px-4 text-center">
@@ -407,7 +438,9 @@ export const ModulePermissionsPage: React.FC = () => {
                                   checked={perms.can_read}
                                   onChange={(e) => handleUserPermissionChange(module.id, 'can_read', e.target.checked)}
                                   disabled={!perms.is_override}
-                                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+                                  className={`h-5 w-5 border-gray-300 rounded ${
+                                    perms.is_override ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600'
+                                  }`}
                                 />
                               </td>
                               <td className="py-3 px-4 text-center">
@@ -416,7 +449,9 @@ export const ModulePermissionsPage: React.FC = () => {
                                   checked={perms.can_update}
                                   onChange={(e) => handleUserPermissionChange(module.id, 'can_update', e.target.checked)}
                                   disabled={!perms.is_override}
-                                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+                                  className={`h-5 w-5 border-gray-300 rounded ${
+                                    perms.is_override ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600'
+                                  }`}
                                 />
                               </td>
                               <td className="py-3 px-4 text-center">
@@ -425,32 +460,16 @@ export const ModulePermissionsPage: React.FC = () => {
                                   checked={perms.can_delete}
                                   onChange={(e) => handleUserPermissionChange(module.id, 'can_delete', e.target.checked)}
                                   disabled={!perms.is_override}
-                                  className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
-                                />
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                <button
-                                  onClick={() => handleToggleInheritance(module.id)}
-                                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                                    perms.is_override
-                                      ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                      : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                  className={`h-5 w-5 border-gray-300 rounded ${
+                                    perms.is_override ? 'text-blue-600 focus:ring-blue-500' : 'text-green-600'
                                   }`}
-                                >
-                                  {perms.is_override ? 'Override' : 'Inherit'}
-                                </button>
+                                />
                               </td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
-                  </div>
-                )}
-
-                {!selectedUser && (
-                  <div className="text-center py-8 text-gray-500">
-                    Please select a user to manage permissions
                   </div>
                 )}
               </>

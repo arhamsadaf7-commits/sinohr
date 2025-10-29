@@ -38,21 +38,6 @@ export const systemConfigService = {
     }
   },
 
-  async getAllConfigs(): Promise<SystemConfig[]> {
-    try {
-      const { data, error } = await supabase
-        .from('system_config')
-        .select('*')
-        .order('config_key', { ascending: true });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching all configs:', error);
-      throw error;
-    }
-  },
-
   async getConfigSection(): Promise<SystemConfigSection> {
     try {
       const config = await this.getAllConfig();

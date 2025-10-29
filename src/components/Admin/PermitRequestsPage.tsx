@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Eye, Check, X, FileText, Search, Filter } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 interface PermitRequest {
@@ -23,16 +22,11 @@ interface PermitRequest {
   updated_at: string;
   reviewed_at?: string;
   reviewed_by?: string;
-  created_by_user_id?: string;
 }
 
 export const PermitRequestsPage: React.FC = () => {
-  const { state } = useAuth();
   const [requests, setRequests] = useState<PermitRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [canCreate, setCanCreate] = useState(false);
-  const [canUpdate, setCanUpdate] = useState(false);
-  const [canDelete, setCanDelete] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<PermitRequest | null>(null);
   const [viewingRequest, setViewingRequest] = useState<PermitRequest | null>(null);
@@ -58,17 +52,7 @@ export const PermitRequestsPage: React.FC = () => {
 
   useEffect(() => {
     fetchRequests();
-    checkPermissions();
-  }, [state.user]);
-
-  const checkPermissions = () => {
-    if (!state.user) return;
-
-    const zawilModule = state.user.role.permissions.filter(p => p.module === 'Zawil Requests');
-    setCanCreate(zawilModule.some(p => p.action === 'create'));
-    setCanUpdate(zawilModule.some(p => p.action === 'update'));
-    setCanDelete(zawilModule.some(p => p.action === 'delete'));
-  };
+  }, []);
 
   const fetchRequests = async () => {
     try {
@@ -118,43 +102,26 @@ export const PermitRequestsPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!state.user) {
-      toast.error('You must be logged in');
-      return;
-    }
-
     try {
       if (editingRequest) {
-        if (!canUpdate) {
-          toast.error('You do not have permission to update requests');
-          return;
-        }
-
         const { error } = await supabase
           .from('zawil_permit_requests')
           .update({
             ...formData,
             updated_at: new Date().toISOString(),
             reviewed_at: formData.status !== 'PENDING' ? new Date().toISOString() : null,
-            reviewed_by: formData.status !== 'PENDING' ? state.user.email : null
+            reviewed_by: formData.status !== 'PENDING' ? 'Admin' : null
           })
           .eq('request_id', editingRequest.request_id);
 
         if (error) throw error;
         toast.success('Request updated successfully');
       } else {
-        if (!canCreate) {
-          toast.error('You do not have permission to create requests');
-          return;
-        }
-
         const { error } = await supabase
           .from('zawil_permit_requests')
           .insert([{
             ...formData,
-            is_public_submission: false,
-            created_by_user_id: state.user.id,
-            submitted_by: state.user.email
+            is_public_submission: false
           }]);
 
         if (error) throw error;
@@ -189,11 +156,6 @@ export const PermitRequestsPage: React.FC = () => {
   };
 
   const handleDelete = async (requestId: number) => {
-    if (!canDelete) {
-      toast.error('You do not have permission to delete requests');
-      return;
-    }
-
     if (!confirm('Are you sure you want to delete this request?')) return;
 
     try {
@@ -212,23 +174,13 @@ export const PermitRequestsPage: React.FC = () => {
   };
 
   const handleStatusUpdate = async (requestId: number, newStatus: 'APPROVED' | 'REJECTED') => {
-    if (!canUpdate) {
-      toast.error('You do not have permission to update requests');
-      return;
-    }
-
-    if (!state.user) {
-      toast.error('You must be logged in');
-      return;
-    }
-
     try {
       const { error } = await supabase
         .from('zawil_permit_requests')
         .update({
           status: newStatus,
           reviewed_at: new Date().toISOString(),
-          reviewed_by: state.user.email,
+          reviewed_by: 'Admin',
           updated_at: new Date().toISOString()
         })
         .eq('request_id', requestId);
@@ -361,15 +313,13 @@ export const PermitRequestsPage: React.FC = () => {
                 <option value="VEHICLE">Vehicle</option>
               </select>
 
-              {canCreate && (
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  <Plus className="w-5 h-5" />
-                  New Request
-                </button>
-              )}
+              <button
+                onClick={() => setShowForm(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                New Request
+              </button>
             </div>
           </div>
 
@@ -740,16 +690,14 @@ export const PermitRequestsPage: React.FC = () => {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          {canUpdate && (
-                            <button
-                              onClick={() => handleEdit(request)}
-                              className="text-gray-600 hover:text-gray-800"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                          )}
-                          {canUpdate && request.status === 'PENDING' && (
+                          <button
+                            onClick={() => handleEdit(request)}
+                            className="text-gray-600 hover:text-gray-800"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          {request.status === 'PENDING' && (
                             <>
                               <button
                                 onClick={() => handleStatusUpdate(request.request_id, 'APPROVED')}
@@ -767,15 +715,13 @@ export const PermitRequestsPage: React.FC = () => {
                               </button>
                             </>
                           )}
-                          {canDelete && (
-                            <button
-                              onClick={() => handleDelete(request.request_id)}
-                              className="text-red-600 hover:text-red-800"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleDelete(request.request_id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
