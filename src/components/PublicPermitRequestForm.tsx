@@ -1,25 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Upload, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+
+interface Country {
+  id: number;
+  country_name: string;
+  country_code: string;
+}
 
 export const PublicPermitRequestForm: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [countries, setCountries] = useState<Country[]>([]);
 
   const [formData, setFormData] = useState({
-    permit_type: '',
-    issued_for: 'VISITOR' as 'VISITOR' | 'PERMANENT' | 'VEHICLE',
+    permit_type: 'TEMPORARY' as 'TEMPORARY' | 'VISITOR' | 'PERMANENT',
+    issued_for: 'PERSON' as 'PERSON' | 'PERSON WITH VEHICLE' | 'VEHICLE' | 'VEHICLE / HEAVY EQUIPMENT',
     english_name: '',
     iqama_moi_number: '',
     passport_number: '',
     nationality: '',
     vehicle_plate_number: '',
-    port_name: '',
+    port_name: 'KING FAHAD INDUSTRIAL PORT IN JUBAIL',
     iqama_image_url: '',
     submitted_by: ''
   });
+
+  useEffect(() => {
+    fetchCountries();
+  }, []);
+
+  const fetchCountries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('master_country_list')
+        .select('id, country_name, country_code')
+        .eq('is_active', true)
+        .order('country_name', { ascending: true });
+
+      if (error) throw error;
+      setCountries(data || []);
+    } catch (error: any) {
+      console.error('Failed to load countries:', error);
+    }
+  };
 
   const handleImageUpload = async (file: File) => {
     try {
@@ -58,7 +84,8 @@ export const PublicPermitRequestForm: React.FC = () => {
         .insert([{
           ...formData,
           is_public_submission: true,
-          status: 'PENDING'
+          status: 'PENDING',
+          created_by_user_id: null
         }]);
 
       if (error) throw error;
@@ -88,14 +115,14 @@ export const PublicPermitRequestForm: React.FC = () => {
             onClick={() => {
               setSubmitted(false);
               setFormData({
-                permit_type: '',
-                issued_for: 'VISITOR',
+                permit_type: 'TEMPORARY',
+                issued_for: 'PERSON',
                 english_name: '',
                 iqama_moi_number: '',
                 passport_number: '',
                 nationality: '',
                 vehicle_plate_number: '',
-                port_name: '',
+                port_name: 'KING FAHAD INDUSTRIAL PORT IN JUBAIL',
                 iqama_image_url: '',
                 submitted_by: ''
               });
@@ -131,14 +158,16 @@ export const PublicPermitRequestForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Permit Type <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   required
                   value={formData.permit_type}
-                  onChange={(e) => setFormData({ ...formData, permit_type: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, permit_type: e.target.value as any })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter permit type"
-                />
+                >
+                  <option value="TEMPORARY">TEMPORARY</option>
+                  <option value="VISITOR">VISITOR</option>
+                  <option value="PERMANENT">PERMANENT</option>
+                </select>
               </div>
 
               <div>
@@ -151,9 +180,10 @@ export const PublicPermitRequestForm: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, issued_for: e.target.value as any })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
-                  <option value="VISITOR">Visitor</option>
-                  <option value="PERMANENT">Permanent</option>
-                  <option value="VEHICLE">Vehicle</option>
+                  <option value="PERSON">PERSON</option>
+                  <option value="PERSON WITH VEHICLE">PERSON WITH VEHICLE</option>
+                  <option value="VEHICLE">VEHICLE</option>
+                  <option value="VEHICLE / HEAVY EQUIPMENT">VEHICLE / HEAVY EQUIPMENT</option>
                 </select>
               </div>
 
@@ -165,9 +195,9 @@ export const PublicPermitRequestForm: React.FC = () => {
                   type="text"
                   required
                   value={formData.english_name}
-                  onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Full name in English"
+                  onChange={(e) => setFormData({ ...formData, english_name: e.target.value.toUpperCase() })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all uppercase"
+                  placeholder="FULL NAME IN ENGLISH"
                 />
               </div>
 
@@ -179,9 +209,14 @@ export const PublicPermitRequestForm: React.FC = () => {
                   type="text"
                   required
                   value={formData.iqama_moi_number}
-                  onChange={(e) => setFormData({ ...formData, iqama_moi_number: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, iqama_moi_number: value });
+                  }}
+                  pattern="[0-9]{1,10}"
+                  maxLength={10}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter IQAMA or MOI number"
+                  placeholder="Enter 10-digit number"
                 />
               </div>
 
@@ -193,9 +228,13 @@ export const PublicPermitRequestForm: React.FC = () => {
                   type="text"
                   required
                   value={formData.passport_number}
-                  onChange={(e) => setFormData({ ...formData, passport_number: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter passport number"
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                    setFormData({ ...formData, passport_number: value });
+                  }}
+                  pattern="[A-Z0-9]+"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all uppercase"
+                  placeholder="ALPHANUMERIC ONLY"
                 />
               </div>
 
@@ -203,14 +242,19 @@ export const PublicPermitRequestForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Nationality <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   required
                   value={formData.nationality}
                   onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter nationality"
-                />
+                >
+                  <option value="">SELECT COUNTRY</option>
+                  {countries.map((country) => (
+                    <option key={country.id} value={country.country_name}>
+                      {country.country_name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -220,9 +264,13 @@ export const PublicPermitRequestForm: React.FC = () => {
                 <input
                   type="text"
                   value={formData.vehicle_plate_number}
-                  onChange={(e) => setFormData({ ...formData, vehicle_plate_number: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Optional"
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                    setFormData({ ...formData, vehicle_plate_number: value });
+                  }}
+                  pattern="[A-Z0-9]*"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all uppercase"
+                  placeholder="ALPHANUMERIC ONLY (OPTIONAL)"
                 />
               </div>
 
@@ -230,14 +278,15 @@ export const PublicPermitRequestForm: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Port Name <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   required
                   value={formData.port_name}
                   onChange={(e) => setFormData({ ...formData, port_name: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="Enter port name"
-                />
+                >
+                  <option value="KING FAHAD INDUSTRIAL PORT IN JUBAIL">KING FAHAD INDUSTRIAL PORT IN JUBAIL</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
               </div>
 
               <div>

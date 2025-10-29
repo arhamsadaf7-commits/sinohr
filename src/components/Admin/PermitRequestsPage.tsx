@@ -6,8 +6,8 @@ import toast from 'react-hot-toast';
 
 interface PermitRequest {
   request_id: number;
-  permit_type: string;
-  issued_for: 'VISITOR' | 'PERMANENT' | 'VEHICLE';
+  permit_type: 'TEMPORARY' | 'VISITOR' | 'PERMANENT';
+  issued_for: 'PERSON' | 'PERSON WITH VEHICLE' | 'VEHICLE' | 'VEHICLE / HEAVY EQUIPMENT';
   english_name: string;
   iqama_moi_number: string;
   passport_number: string;
@@ -25,10 +25,17 @@ interface PermitRequest {
   reviewed_by?: string;
 }
 
+interface Country {
+  id: number;
+  country_name: string;
+  country_code: string;
+}
+
 export const PermitRequestsPage: React.FC = () => {
   const { state } = useAuth();
   const [requests, setRequests] = useState<PermitRequest[]>([]);
   const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingRequest, setEditingRequest] = useState<PermitRequest | null>(null);
@@ -38,18 +45,19 @@ export const PermitRequestsPage: React.FC = () => {
   const [issuedForFilter, setIssuedForFilter] = useState<string>('ALL');
   const [userFilter, setUserFilter] = useState<string>('ALL');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const isAdmin = state.user?.role.name === 'Admin' || state.user?.role.name === 'Admin Assistant';
 
   const [formData, setFormData] = useState({
-    permit_type: '',
-    issued_for: 'VISITOR' as 'VISITOR' | 'PERMANENT' | 'VEHICLE',
+    permit_type: 'TEMPORARY' as 'TEMPORARY' | 'VISITOR' | 'PERMANENT',
+    issued_for: 'PERSON' as 'PERSON' | 'PERSON WITH VEHICLE' | 'VEHICLE' | 'VEHICLE / HEAVY EQUIPMENT',
     english_name: '',
     iqama_moi_number: '',
     passport_number: '',
     nationality: '',
     vehicle_plate_number: '',
-    port_name: '',
+    port_name: 'KING FAHAD INDUSTRIAL PORT IN JUBAIL',
     iqama_image_url: '',
-    submitted_by: '',
+    submitted_by: state.user?.username || state.user?.email || '',
     admin_notes: '',
     status: 'PENDING' as 'PENDING' | 'APPROVED' | 'REJECTED'
   });
@@ -57,7 +65,17 @@ export const PermitRequestsPage: React.FC = () => {
   useEffect(() => {
     fetchRequests();
     fetchUsers();
+    fetchCountries();
   }, []);
+
+  useEffect(() => {
+    if (state.user && !editingRequest) {
+      setFormData(prev => ({
+        ...prev,
+        submitted_by: state.user?.username || state.user?.email || ''
+      }));
+    }
+  }, [state.user, editingRequest]);
 
   const fetchRequests = async () => {
     try {
@@ -92,6 +110,21 @@ export const PermitRequestsPage: React.FC = () => {
       setUsers(data || []);
     } catch (error: any) {
       console.error('Failed to load users:', error);
+    }
+  };
+
+  const fetchCountries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('master_country_list')
+        .select('id, country_name, country_code')
+        .eq('is_active', true)
+        .order('country_name', { ascending: true });
+
+      if (error) throw error;
+      setCountries(data || []);
+    } catch (error: any) {
+      console.error('Failed to load countries:', error);
     }
   };
 
@@ -229,16 +262,16 @@ export const PermitRequestsPage: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
-      permit_type: '',
-      issued_for: 'VISITOR',
+      permit_type: 'TEMPORARY',
+      issued_for: 'PERSON',
       english_name: '',
       iqama_moi_number: '',
       passport_number: '',
       nationality: '',
       vehicle_plate_number: '',
-      port_name: '',
+      port_name: 'KING FAHAD INDUSTRIAL PORT IN JUBAIL',
       iqama_image_url: '',
-      submitted_by: '',
+      submitted_by: state.user?.username || state.user?.email || '',
       admin_notes: '',
       status: 'PENDING'
     });
@@ -342,9 +375,10 @@ export const PermitRequestsPage: React.FC = () => {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="ALL">All Types</option>
-                <option value="VISITOR">Visitor</option>
-                <option value="PERMANENT">Permanent</option>
-                <option value="VEHICLE">Vehicle</option>
+                <option value="PERSON">PERSON</option>
+                <option value="PERSON WITH VEHICLE">PERSON WITH VEHICLE</option>
+                <option value="VEHICLE">VEHICLE</option>
+                <option value="VEHICLE / HEAVY EQUIPMENT">VEHICLE / HEAVY EQUIPMENT</option>
               </select>
 
               <select
@@ -405,13 +439,16 @@ export const PermitRequestsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Permit Type *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
                       value={formData.permit_type}
-                      onChange={(e) => setFormData({ ...formData, permit_type: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, permit_type: e.target.value as any })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      <option value="TEMPORARY">TEMPORARY</option>
+                      <option value="VISITOR">VISITOR</option>
+                      <option value="PERMANENT">PERMANENT</option>
+                    </select>
                   </div>
 
                   <div>
@@ -424,9 +461,10 @@ export const PermitRequestsPage: React.FC = () => {
                       onChange={(e) => setFormData({ ...formData, issued_for: e.target.value as any })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="VISITOR">Visitor</option>
-                      <option value="PERMANENT">Permanent</option>
-                      <option value="VEHICLE">Vehicle</option>
+                      <option value="PERSON">PERSON</option>
+                      <option value="PERSON WITH VEHICLE">PERSON WITH VEHICLE</option>
+                      <option value="VEHICLE">VEHICLE</option>
+                      <option value="VEHICLE / HEAVY EQUIPMENT">VEHICLE / HEAVY EQUIPMENT</option>
                     </select>
                   </div>
 
@@ -438,8 +476,9 @@ export const PermitRequestsPage: React.FC = () => {
                       type="text"
                       required
                       value={formData.english_name}
-                      onChange={(e) => setFormData({ ...formData, english_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => setFormData({ ...formData, english_name: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 uppercase"
+                      placeholder="ENTER NAME IN ENGLISH"
                     />
                   </div>
 
@@ -451,8 +490,14 @@ export const PermitRequestsPage: React.FC = () => {
                       type="text"
                       required
                       value={formData.iqama_moi_number}
-                      onChange={(e) => setFormData({ ...formData, iqama_moi_number: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setFormData({ ...formData, iqama_moi_number: value });
+                      }}
+                      pattern="[0-9]{1,10}"
+                      maxLength={10}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter 10-digit number"
                     />
                   </div>
 
@@ -464,8 +509,13 @@ export const PermitRequestsPage: React.FC = () => {
                       type="text"
                       required
                       value={formData.passport_number}
-                      onChange={(e) => setFormData({ ...formData, passport_number: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                        setFormData({ ...formData, passport_number: value });
+                      }}
+                      pattern="[A-Z0-9]+"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 uppercase"
+                      placeholder="ALPHANUMERIC ONLY"
                     />
                   </div>
 
@@ -473,13 +523,19 @@ export const PermitRequestsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Nationality *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
                       value={formData.nationality}
                       onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      <option value="">SELECT COUNTRY</option>
+                      {countries.map((country) => (
+                        <option key={country.id} value={country.country_name}>
+                          {country.country_name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -489,8 +545,13 @@ export const PermitRequestsPage: React.FC = () => {
                     <input
                       type="text"
                       value={formData.vehicle_plate_number}
-                      onChange={(e) => setFormData({ ...formData, vehicle_plate_number: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                        setFormData({ ...formData, vehicle_plate_number: value });
+                      }}
+                      pattern="[A-Z0-9]*"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 uppercase"
+                      placeholder="ALPHANUMERIC ONLY"
                     />
                   </div>
 
@@ -498,13 +559,15 @@ export const PermitRequestsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Port Name *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
                       value={formData.port_name}
                       onChange={(e) => setFormData({ ...formData, port_name: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      <option value="KING FAHAD INDUSTRIAL PORT IN JUBAIL">KING FAHAD INDUSTRIAL PORT IN JUBAIL</option>
+                      <option value="OTHER">OTHER</option>
+                    </select>
                   </div>
 
                   <div>
@@ -516,24 +579,28 @@ export const PermitRequestsPage: React.FC = () => {
                       required
                       value={formData.submitted_by}
                       onChange={(e) => setFormData({ ...formData, submitted_by: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                      readOnly={!!state.user}
+                      placeholder={state.user ? 'Auto-filled from user' : 'Enter email'}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="PENDING">Pending</option>
-                      <option value="APPROVED">Approved</option>
-                      <option value="REJECTED">Rejected</option>
-                    </select>
-                  </div>
+                  {isAdmin && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Status (Admin Only)
+                      </label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="PENDING">PENDING</option>
+                        <option value="APPROVED">APPROVED</option>
+                        <option value="REJECTED">REJECTED</option>
+                      </select>
+                    </div>
+                  )}
 
                   <div className="col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
