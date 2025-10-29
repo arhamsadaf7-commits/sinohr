@@ -11,6 +11,7 @@ import { ZawilExcelUploader } from '../ZawilUploader/ZawilExcelUploader';
 import { UserManagementPage } from './Settings/UserManagementPage';
 import { ModulePermissionsPage } from './Settings/ModulePermissionsPage';
 import { SystemConfigPage } from './Settings/SystemConfigPage';
+import { SupplierDashboard } from '../Dashboard/SupplierDashboard';
 import { EmployeeProvider } from '../../context/EmployeeContext';
 import { Toaster } from 'react-hot-toast';
 
@@ -20,7 +21,8 @@ interface AdminAppProps {
 
 export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
   const { state } = useAuth();
-  const [activePage, setActivePage] = useState('expiry-dashboard');
+  const isSupplier = state.user?.role.name === 'Supplier';
+  const [activePage, setActivePage] = useState(isSupplier ? 'supplier-dashboard' : 'expiry-dashboard');
 
   const handleBackToDashboard = () => {
     if (onBackToDashboard) {
@@ -48,6 +50,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
 
   const renderPage = () => {
     switch (activePage) {
+      case 'supplier-dashboard':
+        return <SupplierDashboard />;
       case 'expiry-dashboard':
         return <ExpiryDashboard />;
       case 'user-management':
@@ -91,7 +95,7 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
           </div>
         );
       default:
-        return <ExpiryDashboard />;
+        return isSupplier ? <SupplierDashboard /> : <ExpiryDashboard />;
     }
   };
 

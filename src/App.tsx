@@ -52,6 +52,13 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (authState.isAuthenticated && authState.user?.role.name === 'Supplier' && !showAdminPanel) {
+      setShowAdminPanel(true);
+      window.history.pushState({}, '', '/admin');
+    }
+  }, [authState.isAuthenticated, authState.user, showAdminPanel]);
+
   const handleLogout = () => {
     logout();
     setActivePage('dashboard');

@@ -16,7 +16,8 @@ import {
   ChevronRight,
   UserCog,
   Lock,
-  Cog
+  Cog,
+  Home
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -27,13 +28,14 @@ interface AdminNavigationProps {
 }
 
 const navigationItems = [
-  { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'Expiry Dashboard', hideForRoles: ['Supplier'] },
-  { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin', hideForRoles: [] },
-  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'Zawil Requests', hideForRoles: [] },
-  { id: 'zawil-pdf-uploader', label: 'Zawil PDF Uploader', icon: Upload, permission: 'HR', hideForRoles: [] },
-  { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR', hideForRoles: [] },
-  { id: 'profile', label: 'Profile', icon: User, permission: null, hideForRoles: [] },
-  { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR', hideForRoles: [] },
+  { id: 'supplier-dashboard', label: 'Dashboard', icon: Home, permission: null, showOnlyForRoles: ['Supplier'], hideForRoles: [] },
+  { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'Expiry Dashboard', showOnlyForRoles: [], hideForRoles: ['Supplier'] },
+  { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin', showOnlyForRoles: [], hideForRoles: [] },
+  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'Zawil Requests', showOnlyForRoles: [], hideForRoles: [] },
+  { id: 'zawil-pdf-uploader', label: 'Zawil PDF Uploader', icon: Upload, permission: 'HR', showOnlyForRoles: [], hideForRoles: [] },
+  { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR', showOnlyForRoles: [], hideForRoles: [] },
+  { id: 'profile', label: 'Profile', icon: User, permission: null, showOnlyForRoles: [], hideForRoles: [] },
+  { id: 'notifications', label: 'Notifications', icon: Bell, permission: 'HR', showOnlyForRoles: [], hideForRoles: [] },
 ];
 
 const settingsSubmenuItems = [
@@ -120,8 +122,11 @@ export const AdminNavigation: React.FC<AdminNavigationProps> = ({
             const hasPermission = !item.permission || checkPermission(item.permission, 'read');
             const userRole = state.user?.role.name;
             const isHiddenForRole = userRole && item.hideForRoles.includes(userRole);
+            const showOnlyForThisRole = item.showOnlyForRoles.length > 0 && userRole && item.showOnlyForRoles.includes(userRole);
+            const shouldShowForAll = item.showOnlyForRoles.length === 0;
 
             if (!hasPermission || isHiddenForRole) return null;
+            if (!shouldShowForAll && !showOnlyForThisRole) return null;
 
             return (
               <li key={item.id}>
