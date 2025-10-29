@@ -29,7 +29,7 @@ interface AdminNavigationProps {
 const navigationItems = [
   { id: 'expiry-dashboard', label: 'Expiry Dashboard', icon: Calendar, permission: 'HR', hideForRoles: [] },
   { id: 'user-management', label: 'User Management', icon: Users, permission: 'Admin', hideForRoles: [] },
-  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'HR', hideForRoles: ['Supplier'] },
+  { id: 'permit-requests', label: 'Zawil Requests', icon: FileText, permission: 'HR', hideForRoles: [] },
   { id: 'zawil-pdf-uploader', label: 'Zawil PDF Uploader', icon: Upload, permission: 'HR', hideForRoles: [] },
   { id: 'zawil-excel-uploader', label: 'Zawil Excel Uploader', icon: FileSpreadsheet, permission: 'HR', hideForRoles: [] },
   { id: 'profile', label: 'Profile', icon: User, permission: null, hideForRoles: [] },
