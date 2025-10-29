@@ -173,23 +173,45 @@ export const PermitRequestsPage: React.FC = () => {
         if (error) throw error;
         toast.success('Request updated successfully');
       } else {
+        // Prepare data for insert
+        const insertData: any = {
+          permit_type: formData.permit_type,
+          issued_for: formData.issued_for,
+          english_name: formData.english_name,
+          iqama_moi_number: formData.iqama_moi_number,
+          passport_number: formData.passport_number,
+          nationality: formData.nationality,
+          vehicle_plate_number: formData.vehicle_plate_number || null,
+          port_name: formData.port_name,
+          iqama_image_url: formData.iqama_image_url || null,
+          submitted_by: formData.submitted_by,
+          is_public_submission: false,
+          created_by_user_id: state.user?.id || null,
+          admin_notes: formData.admin_notes || null
+        };
+
+        // Only include status if user is admin
+        if (isAdmin) {
+          insertData.status = formData.status;
+        }
+
         const { error } = await supabase
           .from('zawil_permit_requests')
-          .insert([{
-            ...formData,
-            is_public_submission: false,
-            created_by_user_id: state.user?.id
-          }]);
+          .insert([insertData]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
         toast.success('Request created successfully');
       }
 
       resetForm();
       fetchRequests();
     } catch (error: any) {
-      toast.error(editingRequest ? 'Failed to update request' : 'Failed to create request');
-      console.error(error);
+      const errorMessage = error?.message || 'Unknown error';
+      toast.error(editingRequest ? `Failed to update request: ${errorMessage}` : `Failed to create request: ${errorMessage}`);
+      console.error('Submit error details:', error);
     }
   };
 
