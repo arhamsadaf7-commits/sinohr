@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { RefreshCw, Settings, Bell, Search, Filter, Eye, Check, X, Trash2, ChevronDown, ChevronUp, Calendar, FileText, AlertTriangle, CheckCircle, Clock, User, CreditCard, Car, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ZawilToDoListModal } from './ZawilToDoListModal';
+import { ZawilNotificationPanel } from './ZawilNotificationPanel';
 
 interface ZawilPermit {
   permit_id: number;
@@ -325,32 +327,15 @@ export const ZawilExpiryDashboard: React.FC = () => {
         </div>
 
         {/* Notification Panel */}
-        {showNotificationPanel && notificationPermits.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Bell className="w-5 h-5 text-orange-600" />
-                Notifications ({notificationPermits.length})
-              </h2>
-              <button onClick={() => setShowNotificationPanel(false)}>
-                <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
-              </button>
-            </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {notificationPermits.map(permit => (
-                <div key={permit.permit_id} className={`p-3 rounded-lg border ${
-                  permit.status === 'expired' ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'
-                }`}>
-                  <p className="font-medium text-gray-900">{permit.english_name}</p>
-                  <p className="text-sm text-gray-600">
-                    MOI: {permit.moi_number} • {permit.status === 'expired'
-                      ? `Expired ${Math.abs(permit.daysRemaining)} days ago`
-                      : `Expires in ${permit.daysRemaining} days`}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+        {showNotificationPanel && (
+          <ZawilNotificationPanel
+            permits={notificationPermits}
+            onClose={() => setShowNotificationPanel(false)}
+            onSendToTodo={(permits) => {
+              setShowNotificationPanel(false);
+              setShowToDoList(true);
+            }}
+          />
         )}
 
         {/* Search & Filters */}
@@ -391,9 +376,11 @@ export const ZawilExpiryDashboard: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Types</option>
+                <option value="VISITOR">Visitor</option>
+                <option value="PERMANENT">Permanent</option>
+                <option value="VEHICLE">Vehicle</option>
                 <option value="PERSON">Person</option>
                 <option value="PERSON WITH VEHICLE">Person with Vehicle</option>
-                <option value="VEHICLE">Vehicle</option>
                 <option value="VEHICLE / HEAVY EQUIPMENT">Vehicle / Heavy Equipment</option>
               </select>
             </div>
@@ -771,52 +758,11 @@ export const ZawilExpiryDashboard: React.FC = () => {
 
         {/* To Do List Modal */}
         {showToDoList && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    To Do List - Expiring Soon ({toDoPermits.length})
-                  </h2>
-                  <button onClick={() => setShowToDoList(false)}>
-                    <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {toDoPermits.length === 0 ? (
-                    <div className="text-center py-12">
-                      <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                      <p className="text-gray-600">All permits marked as done!</p>
-                    </div>
-                  ) : (
-                    toDoPermits.map(permit => (
-                      <div key={permit.permit_id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-900">{permit.english_name}</p>
-                            <p className="text-sm text-gray-600">
-                              MOI: {permit.moi_number} • Permit: {permit.zawil_permit_id}
-                            </p>
-                            <p className="text-sm text-yellow-700 mt-1">
-                              Expires in {permit.daysRemaining} days ({new Date(permit.expiry_date).toLocaleDateString()})
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => toggleDone(permit.permit_id, false)}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                          >
-                            <Check className="w-4 h-4" />
-                            Mark Done
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ZawilToDoListModal
+            permits={permitsWithStatus}
+            onClose={() => setShowToDoList(false)}
+            onRefresh={fetchPermits}
+          />
         )}
       </div>
     </div>
