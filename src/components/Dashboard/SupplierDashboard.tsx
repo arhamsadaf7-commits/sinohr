@@ -29,10 +29,42 @@ export const SupplierDashboard: React.FC<{ setActivePage?: (page: string) => voi
   const { state } = useAuth();
   const [requests, setRequests] = useState<PermitRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasPermissions, setHasPermissions] = useState(true);
 
   useEffect(() => {
-    fetchMyRequests();
+    checkPermissionsAndFetch();
   }, []);
+
+  const checkPermissionsAndFetch = async () => {
+    try {
+      const { data: permissions, error } = await supabase
+        .from('user_module_permissions')
+        .select('can_read, can_create')
+        .eq('user_id', state.user?.id)
+        .eq('module_name', 'Zawil Requests')
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking permissions:', error);
+      }
+
+      if (permissions) {
+        setHasPermissions(permissions.can_read || false);
+        if (permissions.can_read) {
+          await fetchMyRequests();
+        } else {
+          setLoading(false);
+        }
+      } else {
+        setHasPermissions(true);
+        await fetchMyRequests();
+      }
+    } catch (error) {
+      console.error('Error in checkPermissionsAndFetch:', error);
+      setHasPermissions(true);
+      await fetchMyRequests();
+    }
+  };
 
   const fetchMyRequests = async () => {
     try {
@@ -108,7 +140,7 @@ export const SupplierDashboard: React.FC<{ setActivePage?: (page: string) => voi
           <p className="text-gray-600">Welcome, {state.user?.username}</p>
         </div>
 
-        {!zawilPermissions.canRead ? (
+        {!hasPermissions ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
             <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">No Modules Available</h2>
@@ -144,23 +176,21 @@ export const SupplierDashboard: React.FC<{ setActivePage?: (page: string) => voi
               })}
             </div>
 
-            {zawilPermissions.canCreate && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 mb-1">Create New Request</h2>
-                    <p className="text-sm text-gray-600">Submit a new Zawil permit request for processing</p>
-                  </div>
-                  <button
-                    onClick={() => window.location.href = '/admin#permit-requests'}
-                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus className="w-5 h-5" />
-                    New Request
-                  </button>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-1">Create New Request</h2>
+                  <p className="text-sm text-gray-600">Submit a new Zawil permit request for processing</p>
                 </div>
+                <button
+                  onClick={() => window.location.href = '/admin#permit-requests'}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Request
+                </button>
               </div>
-            )}
+            </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">My Recent Requests</h2>
@@ -168,14 +198,12 @@ export const SupplierDashboard: React.FC<{ setActivePage?: (page: string) => voi
                 <div className="text-center py-12">
                   <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 mb-4">No requests found</p>
-                  {zawilPermissions.canCreate && (
-                    <button
-                      onClick={() => window.location.href = '/admin#permit-requests'}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      Create Your First Request
-                    </button>
-                  )}
+                  <button
+                    onClick={() => window.location.href = '/admin#permit-requests'}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Create Your First Request
+                  </button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
