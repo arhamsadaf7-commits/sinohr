@@ -48,6 +48,8 @@ export const ZawilExpiryDashboard: React.FC = () => {
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [showToDoList, setShowToDoList] = useState(false);
   const [dateFilter, setDateFilter] = useState({ startDate: '', endDate: '', type: 'expiry' as 'issue' | 'expiry' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [settings, setSettings] = useState<StatusSettings>({
     activeDays: 15,
@@ -166,6 +168,14 @@ export const ZawilExpiryDashboard: React.FC = () => {
     });
   }, [filteredPermits, sortField, sortDirection]);
 
+  const paginatedPermits = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    return sortedPermits.slice(start, end);
+  }, [sortedPermits, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(sortedPermits.length / itemsPerPage);
+
   const stats = useMemo(() => {
     const active = permitsWithStatus.filter(p => p.status === 'active').length;
     const expiring = permitsWithStatus.filter(p => p.status === 'expiring').length;
@@ -183,7 +193,7 @@ export const ZawilExpiryDashboard: React.FC = () => {
   }, [permitsWithStatus, settings.notifyDays]);
 
   const toDoPermits = useMemo(() => {
-    return permitsWithStatus.filter(p => p.status === 'expiring' && !p.is_done);
+    return permitsWithStatus.filter(p => p.status === 'expiring' && !p.is_done).sort((a, b) => a.daysRemaining - b.daysRemaining);
   }, [permitsWithStatus]);
 
   const handleSort = (field: typeof sortField) => {
@@ -427,30 +437,32 @@ export const ZawilExpiryDashboard: React.FC = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permit ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issued For</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">MOI Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nationality</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SL</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permit ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issued For</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MOI Number</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nationality</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('issue_date')}>
                     Issue Date {sortField === 'issue_date' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('expiry_date')}>
                     Expiry Date {sortField === 'expiry_date' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100"
                       onClick={() => handleSort('days_remaining')}>
                     Days Left {sortField === 'days_remaining' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {sortedPermits.map((permit) => {
+                {paginatedPermits.map((permit, index) => {
+                  const serialNumber = (currentPage - 1) * itemsPerPage + index + 1;
                   const StatusIcon = getStatusIcon(permit.status);
                   return (
                     <tr key={permit.permit_id} className={`hover:bg-gray-50 ${
@@ -458,13 +470,16 @@ export const ZawilExpiryDashboard: React.FC = () => {
                       permit.status === 'expiring' ? 'bg-yellow-50' :
                       'bg-red-50'
                     }`}>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {serialNumber}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(permit.status)}`}>
                           <StatusIcon className="w-3 h-3" />
                           {permit.status === 'active' ? 'Active' : permit.status === 'expiring' ? 'Expiring' : 'Expired'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <button
                           onClick={() => { setSelectedPermit(permit); setShowDetailsModal(true); }}
                           className="text-blue-600 hover:text-blue-800 font-medium"
@@ -472,18 +487,18 @@ export const ZawilExpiryDashboard: React.FC = () => {
                           {permit.zawil_permit_id}
                         </button>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{permit.permit_type}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{permit.issued_for}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{permit.english_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{permit.moi_number}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{permit.nationality}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{permit.permit_type}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{permit.issued_for}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">{permit.english_name}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{permit.moi_number}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{permit.nationality}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
                         {new Date(permit.issue_date).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
                         {new Date(permit.expiry_date).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`text-sm font-medium ${
                           permit.daysRemaining > settings.expiringSoonDays ? 'text-green-600' :
                           permit.daysRemaining > 0 ? 'text-yellow-600' :
@@ -492,7 +507,7 @@ export const ZawilExpiryDashboard: React.FC = () => {
                           {permit.daysRemaining > 0 ? `${permit.daysRemaining} days` : `${Math.abs(permit.daysRemaining)} days ago`}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => { setSelectedPermit(permit); setShowDetailsModal(true); }}
@@ -523,6 +538,54 @@ export const ZawilExpiryDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Footer */}
+          {sortedPermits.length > 0 && (
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Show</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 border border-gray-300 rounded"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span>items per page</span>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, sortedPermits.length)} of {sortedPermits.length}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronDown className="w-4 h-4 rotate-90" />
+                  </button>
+                  <span className="px-4 py-2 bg-white border border-gray-300 rounded-lg">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronDown className="w-4 h-4 -rotate-90" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mobile View */}

@@ -33,6 +33,7 @@ export const ZawilToDoListModal: React.FC<Props> = ({ permits, onClose, onRefres
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'pending'>('pending');
   const [sortBy, setSortBy] = useState<'days' | 'expiry' | 'name'>('days');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -40,7 +41,7 @@ export const ZawilToDoListModal: React.FC<Props> = ({ permits, onClose, onRefres
   const [selectedPermit, setSelectedPermit] = useState<ZawilPermit | null>(null);
 
   const filteredPermits = useMemo(() => {
-    let filtered = permits.filter(p => p.status === 'expiring' || p.status === 'expired');
+    let filtered = permits.filter(p => p.status === 'expiring');
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -58,13 +59,19 @@ export const ZawilToDoListModal: React.FC<Props> = ({ permits, onClose, onRefres
     }
 
     filtered.sort((a, b) => {
-      if (sortBy === 'days') return a.daysRemaining - b.daysRemaining;
-      if (sortBy === 'expiry') return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
-      return a.english_name.localeCompare(b.english_name);
+      let comparison = 0;
+      if (sortBy === 'days') {
+        comparison = a.daysRemaining - b.daysRemaining;
+      } else if (sortBy === 'expiry') {
+        comparison = new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+      } else {
+        comparison = a.english_name.localeCompare(b.english_name);
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
 
     return filtered;
-  }, [permits, searchTerm, statusFilter, sortBy]);
+  }, [permits, searchTerm, statusFilter, sortBy, sortDirection]);
 
   const paginatedPermits = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
@@ -73,8 +80,8 @@ export const ZawilToDoListModal: React.FC<Props> = ({ permits, onClose, onRefres
   }, [filteredPermits, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredPermits.length / itemsPerPage);
-  const pendingCount = permits.filter(p => (p.status === 'expiring' || p.status === 'expired') && !p.is_done).length;
-  const doneCount = permits.filter(p => (p.status === 'expiring' || p.status === 'expired') && p.is_done).length;
+  const pendingCount = permits.filter(p => p.status === 'expiring' && !p.is_done).length;
+  const doneCount = permits.filter(p => p.status === 'expiring' && p.is_done).length;
 
   const toggleSelect = (permitId: number) => {
     setSelectedIds(prev =>
@@ -185,8 +192,8 @@ export const ZawilToDoListModal: React.FC<Props> = ({ permits, onClose, onRefres
                   <CheckSquare className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">✅ To Do List – Expiring Permits</h2>
-                  <p className="text-sm text-gray-600">Track and manage time-sensitive permits</p>
+                  <h2 className="text-2xl font-bold text-gray-900">✅ To Do List – Expiring Soon Permits</h2>
+                  <p className="text-sm text-gray-600">Track expiring permits that require immediate attention</p>
                 </div>
               </div>
               <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -213,20 +220,29 @@ export const ZawilToDoListModal: React.FC<Props> = ({ permits, onClose, onRefres
                   onChange={(e) => setStatusFilter(e.target.value as any)}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="all">All ({permits.filter(p => p.status === 'expiring' || p.status === 'expired').length})</option>
+                  <option value="all">All ({permits.filter(p => p.status === 'expiring').length})</option>
                   <option value="pending">Pending ({pendingCount})</option>
                   <option value="done">Done ({doneCount})</option>
                 </select>
 
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="days">Days Remaining</option>
-                  <option value="expiry">Expiry Date</option>
-                  <option value="name">Name</option>
-                </select>
+                <div className="flex gap-1">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="px-3 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="days">Days Remaining</option>
+                    <option value="expiry">Expiry Date</option>
+                    <option value="name">Name</option>
+                  </select>
+                  <button
+                    onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                    className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg hover:bg-gray-200 transition-colors"
+                    title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                  >
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
               </div>
             </div>
 
