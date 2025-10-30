@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Clock, CheckCircle, XCircle, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { usePermissions } from '../../hooks/usePermissions';
 import toast from 'react-hot-toast';
 
 interface PermitRequest {
@@ -28,18 +27,11 @@ interface PermitRequest {
 
 export const SupplierDashboard: React.FC<{ setActivePage?: (page: string) => void }> = ({ setActivePage }) => {
   const { state } = useAuth();
-  const { getModulePermissions } = usePermissions();
   const [requests, setRequests] = useState<PermitRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const zawilPermissions = getModulePermissions('Zawil Requests');
-
   useEffect(() => {
-    if (zawilPermissions.canRead) {
-      fetchMyRequests();
-    } else {
-      setLoading(false);
-    }
+    fetchMyRequests();
   }, []);
 
   const fetchMyRequests = async () => {

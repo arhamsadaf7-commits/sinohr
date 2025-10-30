@@ -1,324 +1,215 @@
-import React, { useState } from 'react';
-import { useEmployee } from '../context/EmployeeContext';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, User, Search } from 'lucide-react';
-import { Employee } from '../types/employee';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
+
+interface Employee {
+  employee_id: number;
+  arabic_name: string;
+  english_name: string;
+  moi_number: string;
+  passport_number: string;
+  nationality: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export const EmployeePage: React.FC = () => {
-  const { state, dispatch } = useEmployee();
-  const [showForm, setShowForm] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState({
-    companyId: '',
-    fullName: '',
-    gender: 'Male' as 'Male' | 'Female' | 'Other',
-    dateOfBirth: '',
-    nationality: '',
-    maritalStatus: 'Single' as 'Single' | 'Married' | 'Divorced' | 'Widowed',
-    contactNumber: '',
-    email: '',
-    address: ''
-  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
-  const filteredEmployees = state.employees.filter(emp =>
-    emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.id.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('employee_id', { ascending: false });
+
+      if (error) throw error;
+      setEmployees(data || []);
+    } catch (error: any) {
+      console.error('Error fetching employees:', error);
+      toast.error('Failed to load employees');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (employeeId: number) => {
+    if (!confirm('Are you sure you want to delete this employee?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('employee_id', employeeId);
+
+      if (error) throw error;
+      toast.success('Employee deleted successfully');
+      fetchEmployees();
+    } catch (error: any) {
+      console.error('Error deleting employee:', error);
+      toast.error('Failed to delete employee');
+    }
+  };
+
+  const filteredEmployees = employees.filter(emp =>
+    emp.english_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.arabic_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.moi_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.passport_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.nationality?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (editingEmployee) {
-      dispatch({
-        type: 'UPDATE_EMPLOYEE',
-        payload: { ...editingEmployee, ...formData }
-      });
-      setEditingEmployee(null);
-    } else {
-      dispatch({
-        type: 'ADD_EMPLOYEE',
-        payload: {
-          id: `EMP${Date.now()}`,
-          ...formData
-        }
-      });
-    }
-    
-    setFormData({
-      companyId: '',
-      fullName: '',
-      gender: 'Male',
-      dateOfBirth: '',
-      nationality: '',
-      maritalStatus: 'Single',
-      contactNumber: '',
-      email: '',
-      address: ''
-    });
-    setShowForm(false);
-  };
+  // Pagination
+  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentEmployees = filteredEmployees.slice(startIndex, endIndex);
 
-  const handleEdit = (employee: Employee) => {
-    setEditingEmployee(employee);
-    setFormData({
-      companyId: employee.companyId,
-      fullName: employee.fullName,
-      gender: employee.gender,
-      dateOfBirth: employee.dateOfBirth,
-      nationality: employee.nationality,
-      maritalStatus: employee.maritalStatus,
-      contactNumber: employee.contactNumber,
-      email: employee.email,
-      address: employee.address
-    });
-    setShowForm(true);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this employee and all related data?')) {
-      dispatch({ type: 'DELETE_EMPLOYEE', payload: id });
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Employee Personal Information</h1>
-            <p className="text-gray-600">Manage employee personal details and contact information</p>
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Employee
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search employees..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Employee Management</h1>
+            <p className="text-gray-600">Manage employee records and information</p>
           </div>
         </div>
 
-        {/* Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  {editingEmployee ? 'Edit Employee' : 'Add New Employee'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-                      <select
-                        value={formData.companyId}
-                        onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        <option value="">Select Company</option>
-                        {state.companies.map(company => (
-                          <option key={company.id} value={company.id}>
-                            {company.name} - {company.branch}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                      <input
-                        type="text"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                      <select
-                        value={formData.gender}
-                        onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
-                      <input
-                        type="date"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
-                      <input
-                        type="text"
-                        value={formData.nationality}
-                        onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Marital Status</label>
-                      <select
-                        value={formData.maritalStatus}
-                        onChange={(e) => setFormData({ ...formData, maritalStatus: e.target.value as any })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="Single">Single</option>
-                        <option value="Married">Married</option>
-                        <option value="Divorced">Divorced</option>
-                        <option value="Widowed">Widowed</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number</label>
-                      <input
-                        type="tel"
-                        value={formData.contactNumber}
-                        onChange={(e) => setFormData({ ...formData, contactNumber: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <textarea
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="submit"
-                      className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      {editingEmployee ? 'Update' : 'Add'} Employee
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowForm(false);
-                        setEditingEmployee(null);
-                        setFormData({
-                          companyId: '',
-                          fullName: '',
-                          gender: 'Male',
-                          dateOfBirth: '',
-                          nationality: '',
-                          maritalStatus: 'Single',
-                          contactNumber: '',
-                          email: '',
-                          address: ''
-                        });
-                      }}
-                      className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
+        {/* Search and Stats */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+            <div className="flex-1 w-full md:max-w-md">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search by name, MOI number, passport, or nationality..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-900">{filteredEmployees.length}</div>
+                <div className="text-sm text-gray-600">Total Employees</div>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Employee List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Employee Directory</h2>
-            
-            {filteredEmployees.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredEmployees.map((employee) => {
-                  const company = state.companies.find(c => c.id === employee.companyId);
-                  
-                  return (
-                    <div key={employee.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{employee.fullName}</h3>
-                          <p className="text-sm text-gray-600">{employee.id}</p>
-                        </div>
-                        <div className="flex gap-1">
+        {/* Employee Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">English Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arabic Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MOI Number</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Passport</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nationality</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentEmployees.length > 0 ? (
+                  currentEmployees.map((employee) => (
+                    <tr key={employee.employee_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {employee.employee_id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {employee.english_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {employee.arabic_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {employee.moi_number || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {employee.passport_number || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {employee.nationality || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex gap-2">
                           <button
-                            onClick={() => handleEdit(employee)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(employee.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            onClick={() => handleDelete(employee.employee_id)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <p><span className="text-gray-500">Company:</span> {company?.name || 'N/A'}</p>
-                        <p><span className="text-gray-500">Email:</span> {employee.email}</p>
-                        <p><span className="text-gray-500">Phone:</span> {employee.contactNumber}</p>
-                        <p><span className="text-gray-500">Gender:</span> {employee.gender}</p>
-                        <p><span className="text-gray-500">Nationality:</span> {employee.nationality}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">
-                  {searchTerm ? 'No employees found matching your search' : 'No employees added yet'}
-                </p>
-                {!searchTerm && (
-                  <button
-                    onClick={() => setShowForm(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Add First Employee
-                  </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                      {searchTerm ? 'No employees found matching your search' : 'No employees in database'}
+                    </td>
+                  </tr>
                 )}
-              </div>
-            )}
+              </tbody>
+            </table>
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredEmployees.length)} of {filteredEmployees.length} results
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-4 py-2 text-sm text-gray-700">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

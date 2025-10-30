@@ -230,40 +230,82 @@ export const Dashboard: React.FC<{ setActivePage?: (page: string) => void }> = (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
             <div className="space-y-3">
-              <button 
+              <button
                 onClick={() => setActivePage?.('search')}
                 className="w-full p-4 text-left bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-200"
               >
                 <div className="font-medium text-purple-900">Search Employees</div>
                 <div className="text-sm text-purple-700">Find and generate CV documents</div>
               </button>
-              <button 
-                onClick={() => setActivePage?.('zawil-excel-uploader')}
-                className="w-full p-4 text-left bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
-              >
-                <div className="font-medium text-indigo-900">Upload Zawil Data</div>
-                <div className="text-sm text-indigo-700">Import Zawil permits from Excel</div>
-              </button>
-              <button 
-                onClick={() => setActivePage('employees')}
+              <button
+                onClick={() => setActivePage?.('employees')}
                 className="w-full p-4 text-left bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
               >
-                <div className="font-medium text-blue-900">Add New Employee</div>
-                <div className="text-sm text-blue-700">Create a complete employee profile</div>
+                <div className="font-medium text-blue-900">Employee List</div>
+                <div className="text-sm text-blue-700">View all employees in the database</div>
               </button>
-              <button 
+              <button
+                onClick={() => setActivePage?.('excel')}
+                className="w-full p-4 text-left bg-green-50 hover:bg-green-100 rounded-lg transition-colors border border-green-200"
+              >
+                <div className="font-medium text-green-900">Excel View</div>
+                <div className="text-sm text-green-700">View and manage data in spreadsheet format</div>
+              </button>
+              <button
                 onClick={() => setActivePage('companies')}
                 className="w-full p-4 text-left bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200"
               >
-                <div className="font-medium text-emerald-900">Add Company</div>
-                <div className="text-sm text-emerald-700">Register a new company or branch</div>
+                <div className="font-medium text-emerald-900">Companies</div>
+                <div className="text-sm text-emerald-700">Manage company branches</div>
               </button>
-              <button 
+              <button
+                onClick={() => setActivePage('analytics')}
+                className="w-full p-4 text-left bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+              >
+                <div className="font-medium text-indigo-900">Advanced Analytics</div>
+                <div className="text-sm text-indigo-700">View detailed reports and insights</div>
+              </button>
+              <button
                 onClick={() => setActivePage('reports')}
                 className="w-full p-4 text-left bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200"
               >
-                <div className="font-medium text-amber-900">Export Data</div>
-                <div className="text-sm text-amber-700">Download employee database</div>
+                <div className="font-medium text-amber-900">Reports</div>
+                <div className="text-sm text-amber-700">Generate and download reports</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Employee Module Quick Links */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Employee Management</h2>
+            <div className="space-y-3">
+              <button
+                onClick={() => setActivePage?.('job-info')}
+                className="w-full p-4 text-left bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+              >
+                <div className="font-medium text-slate-900">Job Information</div>
+                <div className="text-sm text-slate-700">Manage employee positions and assignments</div>
+              </button>
+              <button
+                onClick={() => setActivePage?.('documents')}
+                className="w-full p-4 text-left bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors border border-orange-200"
+              >
+                <div className="font-medium text-orange-900">Documents</div>
+                <div className="text-sm text-orange-700">Track IQAMAs, passports, and certifications</div>
+              </button>
+              <button
+                onClick={() => setActivePage?.('emergency')}
+                className="w-full p-4 text-left bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
+              >
+                <div className="font-medium text-red-900">Emergency Contacts</div>
+                <div className="text-sm text-red-700">Maintain emergency contact information</div>
+              </button>
+              <button
+                onClick={() => setActivePage?.('skills')}
+                className="w-full p-4 text-left bg-cyan-50 hover:bg-cyan-100 rounded-lg transition-colors border border-cyan-200"
+              >
+                <div className="font-medium text-cyan-900">Skills & Experience</div>
+                <div className="text-sm text-cyan-700">Record employee qualifications and history</div>
               </button>
             </div>
           </div>
