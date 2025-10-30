@@ -4,6 +4,7 @@ import { AdminLoginForm } from '../Auth/AdminLoginForm';
 import { AdminNavigation } from './AdminNavigation';
 import { AdminProfile } from './AdminProfile';
 import { ExpiryDashboard } from './ExpiryDashboard';
+import { ZawilExpiryDashboard } from './ZawilExpiryDashboard';
 import { UserManagement } from './UserManagement';
 import { PermitRequestsPage } from './PermitRequestsPage';
 import { ZawilUploader } from '../ZawilUploader/ZawilUploader';
@@ -53,6 +54,8 @@ export const AdminApp: React.FC<AdminAppProps> = ({ onBackToDashboard }) => {
       case 'supplier-dashboard':
         return <SupplierDashboard />;
       case 'expiry-dashboard':
+        return <ZawilExpiryDashboard />;
+      case 'expiry-dashboard-old':
         return <ExpiryDashboard />;
       case 'user-management':
         return <UserManagement />;
