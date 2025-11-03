@@ -18,6 +18,7 @@ import { DocumentsPage } from './components/DocumentsPage';
 import { EmergencyContactPage } from './components/EmergencyContactPage';
 import { SkillsPage } from './components/SkillsPage';
 import { PublicPermitRequestForm } from './components/PublicPermitRequestForm';
+import { EmployeeDirectory } from './components/Employee/EmployeeDirectory';
 import { Toaster } from 'react-hot-toast';
 
 function App() {
@@ -108,6 +109,8 @@ function App() {
     switch (activePage) {
       case 'dashboard':
         return isSupplier ? <SupplierDashboard setActivePage={setActivePage} /> : <Dashboard setActivePage={setActivePage} />;
+      case 'employee-directory':
+        return <EmployeeDirectory />;
       case 'search':
         return <EmployeeSearchPage />;
       case 'analytics':

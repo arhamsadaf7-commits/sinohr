@@ -22,7 +22,8 @@ const navigationItems: MenuItem[] = [
     label: 'Employee',
     icon: User,
     children: [
-      { id: 'employees', label: 'Employee List', icon: User },
+      { id: 'employee-directory', label: 'Employee Directory', icon: User },
+      { id: 'employees', label: 'Employee List (Old)', icon: User },
       { id: 'search', label: 'Search Employees', icon: Search },
       { id: 'excel', label: 'Excel View', icon: Grid3X3 },
       { id: 'job-info', label: 'Job Information', icon: Briefcase },
